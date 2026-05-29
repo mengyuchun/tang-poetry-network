@@ -240,7 +240,7 @@ HEADER_HTML = """
 </div>
 <div class="view active" id="graph"></div>
 <div class="view" id="mapView">
-    <div class="map-timeline" id="mapTimeline">
+    <div class="map-timeline" id="mapTimeline" onclick="L.DomEvent.stopPropagation(event)" onmousedown="L.DomEvent.stopPropagation(event)" onmouseup="L.DomEvent.stopPropagation(event)" onpointerdown="L.DomEvent.stopPropagation(event)" onpointerup="L.DomEvent.stopPropagation(event)">
         <label>⏱️ 时间线</label>
         <button id="playBtn" onclick="mapTimelineToggle()">▶ 播放</button>
         <input type="range" id="yearSlider" min="618" max="907" value="750" step="1">
@@ -383,7 +383,7 @@ const node = g.append('g').selectAll('circle').data(DATA.nodes).join('circle')
     .classed('famous-pulse', d => famousPoets.has(d.id))
     .call(d3.drag().on('start',dragStart).on('drag',dragging).on('end',dragEnd))
     .on('click', (e,d) => showNodeDetail(d))
-    .on('mouseover', function(e,d) { d3.select(this).attr('stroke','#c23531').attr('stroke-width',3); showTooltip(e,d.id+' ('+(d.poemCount||0)+'首, '+d.totalDegree+'条)'); highlightNode(d); })
+    .on('mouseover', function(e,d) { d3.select(this).attr('stroke','#c23531').attr('stroke-width',3); let tip=d.id; if(d.birthYear)tip+=' ('+d.birthYear+'-'+(d.deathYear||'?')+')'; tip+=' '+(d.poemCount||0)+'首 '+d.totalDegree+'条'; showTooltip(e,tip); highlightNode(d); })
     .on('mouseout', function() { d3.select(this).attr('stroke','#f5f0e8').attr('stroke-width',1); hideTooltip(); resetHighlight(); });
 
 const label = g.append('g').selectAll('text').data(DATA.nodes.filter(d => d.totalDegree >= 5)).join('text')
@@ -422,7 +422,8 @@ function updateMapMarkers(minYear, maxYear) {
     mapMarkers.clearLayers();
     const active = mapGeoNodes.filter(n => {
         if (!n.birthYear || n.birthYear <= 0) return false;
-        return n.birthYear >= minYear && n.birthYear <= maxYear;
+        const death = n.deathYear || (n.birthYear + 60); // 无死亡年则估算60岁
+        return n.birthYear <= maxYear && death >= minYear; // 在时间窗口内活跃
     });
     active.forEach(n => {
         const color = PERIOD_COLORS[n.period] || '#999';
@@ -433,7 +434,11 @@ function updateMapMarkers(minYear, maxYear) {
             const poems = (n.poems||[]).slice(0,3);
             let h = '<div style="font-family:STKaiti,KaiTi,serif;min-width:180px">';
             h += '<div style="font-size:15px;font-weight:bold;margin-bottom:3px">'+n.id+'</div>';
-            h += '<div style="font-size:11px;color:#888;margin-bottom:6px">'+n.period+(n.place?' · '+n.place:'')+'</div>';
+            let bio = [n.period];
+            if(n.birthYear) bio.push(n.birthYear+'-'+(n.deathYear||'?'));
+            if(n.deathAge) bio.push('享年'+n.deathAge);
+            if(n.place) bio.push(n.place);
+            h += '<div style="font-size:11px;color:#888;margin-bottom:6px">'+bio.join(' · ')+'</div>';
             h += '<div style="font-size:11px;margin-bottom:6px">诗作:'+(n.poemCount||0)+' · 赠诗:'+n.outDegree+' · 被赠:'+n.inDegree+'</div>';
             if(poems.length>0){h+='<div style="border-top:1px solid #eee;padding-top:5px">';poems.forEach(p=>{h+='<div style="font-size:10px;color:#555;margin-bottom:3px"><b>《'+p.title+'》</b></div>';h+='<div style="font-size:10px;color:#888;margin-bottom:4px">'+p.text.split('\n').slice(0,2).join('<br>')+'</div>';});h+='</div>';}
             h += '<div style="margin-top:6px"><a href="javascript:void(0)" onclick="switchTab(\'network\');searchAndFocus(\''+n.id+'\')" style="color:#c23531;font-size:11px">在网络图中查看 →</a></div></div>';
@@ -491,7 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// ============ 统计 ============
+// ============ 统计与洞察 ============
 let statsInitialized = false;
 function initStats() {
     statsInitialized = true;
@@ -500,27 +505,44 @@ function initStats() {
     const periods = ['初唐','盛唐','中唐','晚唐','未知'];
     const pColors = periods.map(p => PERIOD_COLORS[p]||'#999');
 
-    // 诗作数 TOP 20
     const topByPoems = DATA.nodes.filter(n => n.poemCount > 0).sort((a,b) => b.poemCount - a.poemCount).slice(0, 20);
-    // 诗作数分布
     const poemBins = [0,1,5,10,50,100,500,1000,3000];
     const poemDist = poemBins.map((b,i) => { const next = poemBins[i+1] || 99999; return DATA.nodes.filter(n => n.poemCount >= b && n.poemCount < next).length; });
-    // 关系权重分布
     const weightBins = [1,2,3,5,10,20,50];
     const weightDist = weightBins.map((b,i) => { const next = weightBins[i+1] || 999; return edgesFiltered.filter(e => e.weight >= b && e.weight < next).length; });
-    // 连接度分布
     const degreeBins = [0,1,2,5,10,20,50,100,200];
     const degreeDist = degreeBins.map((b,i) => { const next = degreeBins[i+1] || 999; return DATA.nodes.filter(n => n.totalDegree >= b && n.totalDegree < next).length; });
 
+    // 洞察计算
+    const adj = new Map();
+    edgesFiltered.forEach(e => { const s=e.source.id||e.source, t=e.target.id||e.target; if(!adj.has(s))adj.set(s,[]); if(!adj.has(t))adj.set(t,[]); adj.get(s).push(t); adj.get(t).push(s); });
+    const connectedNodes = DATA.nodes.filter(n => n.totalDegree > 0).map(n => n.id);
+    let totalDist = 0, distCount = 0;
+    for (let i = 0; i < Math.min(100, connectedNodes.length); i++) {
+        const start = connectedNodes[Math.floor(Math.random() * connectedNodes.length)];
+        const visited = new Map(); visited.set(start, 0); const queue = [start];
+        while (queue.length > 0) { const curr = queue.shift(); for (const next of (adj.get(curr) || [])) { if (!visited.has(next)) { visited.set(next, visited.get(curr) + 1); queue.push(next); } } }
+        visited.forEach((dist, node) => { if (node !== start && dist > 0) { totalDist += dist; distCount++; } });
+    }
+    const avgPath = distCount > 0 ? (totalDist / distCount).toFixed(1) : 'N/A';
+    const busiest = DATA.nodes.filter(n => n.totalDegree > 0).sort((a,b) => b.totalDegree - a.totalDegree).slice(0, 5);
+    const lonelyPoets = DATA.nodes.filter(n => n.poemCount >= 50 && n.totalDegree <= 3).sort((a,b) => b.poemCount - a.poemCount).slice(0, 5);
+    const geoByPeriod = {};
+    ['初唐','盛唐','中唐','晚唐'].forEach(p => {
+        const nodes = DATA.nodes.filter(n => n.period === p && n.lng && n.lat);
+        if (nodes.length > 0) geoByPeriod[p] = { lng: (nodes.reduce((s,n) => s + n.lng, 0) / nodes.length).toFixed(1), lat: (nodes.reduce((s,n) => s + n.lat, 0) / nodes.length).toFixed(1), count: nodes.length };
+    });
+
+    // 一次性构建全部 HTML
     sv.innerHTML = '<div class="stats-summary">'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+DATA.nodes.length+'</div><div class="stats-summary-label">诗人总数</div></div>'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+edgesFiltered.length+'</div><div class="stats-summary-label">赠诗关系</div></div>'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+poemIndex.length+'</div><div class="stats-summary-label">收录诗作</div></div>'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+ns.avgDegree+'</div><div class="stats-summary-label">平均连接度</div></div>'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+ns.maxDegree+'</div><div class="stats-summary-label">最大连接度</div></div>'
-        + '<div class="stats-summary-item"><div class="stats-summary-num">'+ns.isolatedNodes+'</div><div class="stats-summary-label">孤立节点</div></div>'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+topByPoems[0]?.id+'</div><div class="stats-summary-label">诗作最多</div></div>'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+tp[0]?.id+'</div><div class="stats-summary-label">关系最多</div></div>'
+        + '<div class="stats-summary-item"><div class="stats-summary-num">'+avgPath+'</div><div class="stats-summary-label">平均距离</div></div>'
         + '</div><div class="stats-grid">'
         + '<div class="stats-card"><h3>📊 朝代分布</h3><canvas id="chartPeriod"></canvas></div>'
         + '<div class="stats-card"><h3>🏆 社交影响力 TOP 20</h3><canvas id="chartTop"></canvas></div>'
@@ -529,88 +551,30 @@ function initStats() {
         + '<div class="stats-card"><h3>🔗 连接度分布</h3><canvas id="chartDegree"></canvas></div>'
         + '<div class="stats-card"><h3>📊 赠诗次数分布</h3><canvas id="chartWeight"></canvas></div>'
         + '</div>'
+        + '<div class="insight-card"><h3>👑 唐代社交之王</h3><p>这些诗人拥有最广泛的社交网络，是唐代文人圈的核心节点。</p>'
+        + busiest.map(n => '<div class="data-row"><span class="data-label"><b>' + n.id + '</b> (' + n.period + ')</span><span>' + n.totalDegree + ' 条关系 · ' + (n.poemCount||0) + ' 首诗</span></div>').join('')
+        + '<button class="insight-btn" onclick="searchAndFocus(\'' + busiest[0].id + '\')">探索 ' + busiest[0].id + ' 的网络</button></div>'
+        + '<div class="insight-card"><h3>🏔️ 最「孤独」的高产诗人</h3><p>写了大量诗作，但在赠诗关系网络中却很少出现。</p>'
+        + lonelyPoets.map(n => '<div class="data-row"><span class="data-label"><b>' + n.id + '</b> (' + n.period + ')</span><span>' + (n.poemCount||0) + ' 首诗 · 仅 ' + n.totalDegree + ' 条关系</span></div>').join('') + '</div>'
+        + '<div class="insight-card"><h3>🌍 诗歌地理中心迁移</h3><p>从初唐到晚唐，诗歌的地理中心如何移动？</p>'
+        + Object.entries(geoByPeriod).map(([p, d]) => '<div class="data-row"><span class="data-label"><b>' + p + '</b></span><span>中心: (' + d.lat + '°N, ' + d.lng + '°E) · ' + d.count + ' 位诗人</span></div>').join('')
+        + '<button class="insight-btn" onclick="switchTab(\'map\');mapTimelinePlay()">观看时间线动画</button></div>'
         + '<div style="margin-top:24px;padding:16px;background:var(--card);border:1px solid var(--border);border-radius:8px;text-align:center">'
         + '<div style="font-size:14px;color:var(--text);margin-bottom:8px">关于本项目</div>'
         + '<div style="font-size:12px;color:var(--text2);line-height:1.8">'
-        + '数据来源：<a href="https://projects.iq.harvard.edu/cbdb" target="_blank" style="color:var(--accent)">CBDB 中国历代人物传记资料库</a>（Harvard University）'
-        + ' + <a href="https://github.com/chinese-poetry/chinese-poetry" target="_blank" style="color:var(--accent)">chinese-poetry</a>（全唐诗）<br>'
+        + '数据来源：<a href="https://projects.iq.harvard.edu/cbdb" target="_blank" style="color:var(--accent)">CBDB 中国历代人物传记资料库</a>（Harvard University）+ <a href="https://github.com/chinese-poetry/chinese-poetry" target="_blank" style="color:var(--accent)">chinese-poetry</a>（全唐诗）<br>'
         + '技术栈：D3.js · Leaflet.js · Chart.js · html2canvas<br>'
-        + '项目地址：<a href="https://github.com/mengyuchun/tang-poetry-network" target="_blank" style="color:var(--accent)">GitHub</a>'
-        + ' · License: MIT<br>'
-        + '<span style="color:var(--text3)">如果觉得有趣，请给个 Star ⭐</span>'
-        + '</div></div>';
+        + '项目地址：<a href="https://github.com/mengyuchun/tang-poetry-network" target="_blank" style="color:var(--accent)">GitHub</a> · License: MIT<br>'
+        + '方法论：平均距离通过 BFS 算法在连通分量中采样计算。地理中心为诗人籍贯坐标的算术平均值。局限性：赠诗关系仅记录有文献记载的交往。<br>'
+        + '<span style="color:var(--text3)">如果觉得有趣，请给个 Star ⭐</span></div></div>';
 
-    // 朝代分布
+    // 初始化图表（HTML 已全部渲染完毕）
     new Chart(document.getElementById('chartPeriod'), { type:'doughnut', data:{labels:periods,datasets:[{data:periods.map(p=>pd[p]||0),backgroundColor:pColors,borderWidth:0}]}, options:{responsive:true,plugins:{legend:{position:'bottom'}}} });
-    // 社交影响力 TOP 20
     new Chart(document.getElementById('chartTop'), { type:'bar', data:{labels:tp.map(p=>p.id),datasets:[{label:'赠诗',data:tp.map(p=>p.outDegree),backgroundColor:'rgba(194,53,49,0.7)'},{label:'被赠',data:tp.map(p=>p.inDegree),backgroundColor:'rgba(47,69,84,0.7)'}]}, options:{indexAxis:'y',responsive:true,scales:{x:{stacked:true},y:{stacked:true}},plugins:{legend:{position:'bottom'}}} });
-    // 诗作数量 TOP 20
-    new Chart(document.getElementById('chartPoems'), { type:'bar', data:{labels:topByPoems.map(p=>p.id),datasets:[{label:'诗作数',data:topByPoems.map(p=>p.poemCount),backgroundColor:'rgba(97,160,168,0.7)'}]}, options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}} } });
-    // 诗作数量分布
+    new Chart(document.getElementById('chartPoems'), { type:'bar', data:{labels:topByPoems.map(p=>p.id),datasets:[{label:'诗作数',data:topByPoems.map(p=>p.poemCount),backgroundColor:'rgba(97,160,168,0.7)'}]}, options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}}} });
     new Chart(document.getElementById('chartPoemDist'), { type:'bar', data:{labels:poemBins.map((b,i)=>{const n=poemBins[i+1];return n?b+'-'+n:b+'+';}),datasets:[{label:'诗人数',data:poemDist,backgroundColor:'rgba(194,53,49,0.6)'}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{type:'logarithmic'}}} });
-    // 连接度分布
     new Chart(document.getElementById('chartDegree'), { type:'bar', data:{labels:degreeBins.map((b,i)=>{const n=degreeBins[i+1];return n?b+'-'+n:b+'+';}),datasets:[{label:'节点数',data:degreeDist,backgroundColor:'rgba(47,69,84,0.6)'}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{type:'logarithmic'}}} });
-    // 赠诗次数分布
     new Chart(document.getElementById('chartWeight'), { type:'bar', data:{labels:weightBins.map((b,i)=>{const n=weightBins[i+1];return n?b+'-'+n:b+'+';}),datasets:[{label:'关系数',data:weightDist,backgroundColor:'rgba(212,130,101,0.6)'}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{type:'logarithmic'}}} });
-
-    // ============ 洞察内容 ============
-    // 平均路径长度（采样）
-    const adj = new Map();
-    edgesFiltered.forEach(e => { const s=e.source.id||e.source, t=e.target.id||e.target; if(!adj.has(s))adj.set(s,[]); if(!adj.has(t))adj.set(t,[]); adj.get(s).push(t); adj.get(t).push(s); });
-    const connectedNodes = DATA.nodes.filter(n => n.totalDegree > 0).map(n => n.id);
-    let totalDist = 0, distCount = 0;
-    const sampleSize = Math.min(100, connectedNodes.length);
-    for (let i = 0; i < sampleSize; i++) {
-        const start = connectedNodes[Math.floor(Math.random() * connectedNodes.length)];
-        const visited = new Map(); visited.set(start, 0);
-        const queue = [start];
-        while (queue.length > 0) { const curr = queue.shift(); for (const next of (adj.get(curr) || [])) { if (!visited.has(next)) { visited.set(next, visited.get(curr) + 1); queue.push(next); } } }
-        visited.forEach((dist, node) => { if (node !== start && dist > 0) { totalDist += dist; distCount++; } });
-    }
-    const avgPath = distCount > 0 ? (totalDist / distCount).toFixed(1) : 'N/A';
-
-    // 最繁忙诗人
-    const busiest = DATA.nodes.filter(n => n.totalDegree > 0).sort((a,b) => b.totalDegree - a.totalDegree).slice(0, 5);
-    // 高产但关系少
-    const lonelyPoets = DATA.nodes.filter(n => n.poemCount >= 50 && n.totalDegree <= 3).sort((a,b) => b.poemCount - a.poemCount).slice(0, 5);
-    // 地理中心
-    const geoByPeriod = {};
-    ['初唐','盛唐','中唐','晚唐'].forEach(p => {
-        const nodes = DATA.nodes.filter(n => n.period === p && n.lng && n.lat);
-        if (nodes.length > 0) { geoByPeriod[p] = { lng: (nodes.reduce((s,n) => s + n.lng, 0) / nodes.length).toFixed(1), lat: (nodes.reduce((s,n) => s + n.lat, 0) / nodes.length).toFixed(1), count: nodes.length }; }
-    });
-
-    const insightsHtml = '<div class="insight-card"><h3>🔍 数据全景</h3>'
-        + '<div class="insight-grid">'
-        + '<div class="insight-stat"><div class="num">' + DATA.nodes.length + '</div><div class="label">诗人总数</div></div>'
-        + '<div class="insight-stat"><div class="num">' + edgesFiltered.length + '</div><div class="label">赠诗关系</div></div>'
-        + '<div class="insight-stat"><div class="num">' + poemIndex.length + '</div><div class="label">收录诗作</div></div>'
-        + '<div class="insight-stat"><div class="num">' + avgPath + '</div><div class="label">平均距离（步）</div></div>'
-        + '</div></div>'
-
-        + '<div class="insight-card"><h3>👑 唐代社交之王</h3>'
-        + '<p>这些诗人拥有最广泛的社交网络，是唐代文人圈的核心节点。</p>'
-        + busiest.map(n => '<div class="data-row"><span class="data-label"><b>' + n.id + '</b> (' + n.period + ')</span><span>' + n.totalDegree + ' 条关系 · ' + (n.poemCount||0) + ' 首诗</span></div>').join('')
-        + '<button class="insight-btn" onclick="searchAndFocus(\'' + busiest[0].id + '\')">探索 ' + busiest[0].id + ' 的网络</button></div>'
-
-        + '<div class="insight-card"><h3>🏔️ 最「孤独」的高产诗人</h3>'
-        + '<p>这些诗人写了大量诗作，但在赠诗关系网络中却很少出现。</p>'
-        + lonelyPoets.map(n => '<div class="data-row"><span class="data-label"><b>' + n.id + '</b> (' + n.period + ')</span><span>' + (n.poemCount||0) + ' 首诗 · 仅 ' + n.totalDegree + ' 条关系</span></div>').join('')
-        + '</div>'
-
-        + '<div class="insight-card"><h3>🌍 诗歌地理中心迁移</h3>'
-        + '<p>从初唐到晚唐，诗歌的地理中心如何移动？</p>'
-        + Object.entries(geoByPeriod).map(([p, d]) => '<div class="data-row"><span class="data-label"><b>' + p + '</b></span><span>中心: (' + d.lat + '°N, ' + d.lng + '°E) · ' + d.count + ' 位诗人</span></div>').join('')
-        + '<button class="insight-btn" onclick="switchTab(\'map\');mapTimelinePlay()">观看时间线动画</button></div>'
-
-        + '<div class="insight-card"><h3>💡 关于这些数据</h3>'
-        + '<p>数据来源：<a href="https://projects.iq.harvard.edu/cbdb" target="_blank" style="color:var(--accent)">CBDB</a> + <a href="https://github.com/chinese-poetry/chinese-poetry" target="_blank" style="color:var(--accent)">chinese-poetry</a></p>'
-        + '<p>平均距离通过 BFS 算法在连通分量中采样计算。地理中心为诗人籍贯坐标的算术平均值。</p>'
-        + '<p>局限性：赠诗关系仅记录有文献记载的交往，实际文人交流远比数据丰富。</p>'
-        + '</div>';
-
-    // 追加到统计页面
-    sv.innerHTML += insightsHtml;
 }
 
 // ============ 路径输入自动补全 ============
@@ -804,7 +768,13 @@ function showNodeDetail(d) {
     document.getElementById('panelToggle').textContent = '◀';
     const pc=PERIOD_COLORS[d.period]||'#999';const rels=getRelations(d);const poems=d.poems||[];
     let h='<div class="panel-title">'+d.id+'</div><div class="panel-period" style="background:'+pc+'">'+d.period+'</div>';
-    if(d.place)h+='<div style="color:var(--text3);font-size:12px;margin-bottom:10px">\u{1F4CD} '+d.place+'</div>';
+    // 生卒年信息
+    let bioInfo = [];
+    if(d.birthYear) bioInfo.push((d.female?'♀ ':'')+'生于 '+d.birthYear+'年');
+    if(d.deathYear) bioInfo.push('卒于 '+d.deathYear+'年');
+    if(d.deathAge) bioInfo.push('享年 '+d.deathAge+'岁');
+    if(d.place) bioInfo.push('\u{1F4CD} '+d.place);
+    if(bioInfo.length > 0) h+='<div style="color:var(--text3);font-size:12px;margin-bottom:10px">'+bioInfo.join(' · ')+'</div>';
     h+='<div class="panel-stats"><div class="panel-stat" onclick="showPoemsModal(\''+d.id+'\')"><div class="panel-stat-num">'+(d.poemCount||0)+'</div><div class="panel-stat-label">诗作</div></div>';
     h+='<div class="panel-stat" onclick="showRelationsModal(\''+d.id+'\',\'out\')"><div class="panel-stat-num">'+d.outDegree+'</div><div class="panel-stat-label">赠诗</div></div>';
     h+='<div class="panel-stat" onclick="showRelationsModal(\''+d.id+'\',\'in\')"><div class="panel-stat-num">'+d.inDegree+'</div><div class="panel-stat-label">被赠</div></div></div>';

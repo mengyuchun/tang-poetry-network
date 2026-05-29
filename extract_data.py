@@ -139,20 +139,31 @@ def build_nodes(edges, poems_by_author, poet_coords):
             'poems': representative
         })
 
-    # 通过出生年推断时期
-    # 需要从 CBDB 获取出生年
+    # 获取生卒年和性别
     conn = sqlite3.connect(DB_PATH)
-    birth_data = pd.read_sql_query("""
-        SELECT c_name_chn, c_birthyear FROM BIOG_MAIN
-        WHERE c_dy = 6 AND c_birthyear IS NOT NULL AND c_birthyear > 0
+    bio_data = pd.read_sql_query("""
+        SELECT c_name_chn, c_birthyear, c_deathyear, c_death_age, c_female
+        FROM BIOG_MAIN
+        WHERE c_dy = 6
     """, conn)
     conn.close()
-    birth_map = dict(zip(birth_data['c_name_chn'], birth_data['c_birthyear']))
+    bio_map = {}
+    for _, row in bio_data.iterrows():
+        bio_map[row['c_name_chn']] = {
+            'birth': row['c_birthyear'],
+            'death': row['c_deathyear'],
+            'age': row['c_death_age'],
+            'female': row['c_female']
+        }
 
     for node in nodes:
-        birth = birth_map.get(node['id'])
+        bio = bio_map.get(node['id'], {})
+        birth = bio.get('birth')
         node['period'] = get_period(birth)
         node['birth_year'] = int(birth) if birth and birth > 0 else None
+        node['death_year'] = int(bio['death']) if bio.get('death') and bio['death'] > 0 else None
+        node['death_age'] = int(bio['age']) if bio.get('age') and bio['age'] > 0 else None
+        node['female'] = bool(bio.get('female'))
 
     return nodes
 
@@ -189,6 +200,9 @@ def main():
             'lat': n['lat'],
             'place': n['place'],
             'birthYear': n.get('birth_year'),
+            'deathYear': n.get('death_year'),
+            'deathAge': n.get('death_age'),
+            'female': n.get('female', False),
             'poems': n['poems']
         })
 
