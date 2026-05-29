@@ -116,13 +116,11 @@ def build_nodes(edges, poems_by_author, poet_coords):
         out_d = out_deg.get(name, 0)
         in_d = in_deg.get(name, 0)
 
-        # 取代表诗作（最多5首）
+        # 保存全部诗作
         poet_poems = poems_by_author.get(name, [])
         representative = []
-        for p in poet_poems[:5]:
+        for p in poet_poems:
             text = '\n'.join(p['paragraphs'])
-            if len(text) > 100:
-                text = text[:100] + '...'
             representative.append({'title': p['title'], 'text': text})
 
         coord = coord_map.get(name, {})
