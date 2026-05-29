@@ -172,6 +172,31 @@ body.dark::before { background: radial-gradient(ellipse at 20% 50%,rgba(100,80,1
 .onboarding-btn:hover { opacity:0.85; }
 .tooltip { position:absolute; background:var(--header); color:var(--headerText); padding:5px 10px; border-radius:4px; font-size:12px; pointer-events:none; z-index:200; white-space:nowrap; }
 .leaflet-container { background:var(--bg) !important; }
+/* 地图时间线 */
+.map-timeline { position:absolute; bottom:40px; left:50%; transform:translateX(-50%); z-index:1000; background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px 20px; display:flex; align-items:center; gap:12px; box-shadow:0 4px 20px var(--shadow); min-width:500px; }
+.map-timeline label { font-size:12px; color:var(--text); white-space:nowrap; }
+.map-timeline input[type=range] { flex:1; height:4px; -webkit-appearance:none; background:var(--border); border-radius:2px; outline:none; }
+.map-timeline input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; background:var(--accent); border-radius:50%; cursor:pointer; }
+.map-timeline .year-display { font-size:16px; font-weight:bold; color:var(--accent); min-width:50px; text-align:center; }
+.map-timeline .period-display { font-size:11px; color:var(--text3); }
+.map-timeline button { padding:3px 10px; background:var(--accent); color:#fff; border:none; border-radius:3px; font-size:11px; cursor:pointer; font-family:inherit; }
+.map-timeline button:hover { opacity:0.85; }
+.map-timeline .count-display { font-size:11px; color:var(--text3); }
+/* 洞察页面 */
+.insights-container { padding:24px; overflow-y:auto; height:100%; }
+.insight-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:20px; margin-bottom:16px; }
+.insight-card h3 { font-size:16px; color:var(--text); margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px; }
+.insight-card p { font-size:13px; color:var(--text2); line-height:1.8; margin-bottom:10px; }
+.insight-card .highlight { color:var(--accent); font-weight:bold; }
+.insight-card .data-row { display:flex; justify-content:space-between; padding:4px 0; font-size:12px; color:var(--text2); border-bottom:1px solid var(--border); }
+.insight-card .data-row:last-child { border-bottom:none; }
+.insight-card .data-label { color:var(--text); }
+.insight-card .insight-btn { padding:6px 14px; background:var(--accent); color:#fff; border:none; border-radius:4px; font-size:12px; cursor:pointer; font-family:inherit; margin-top:8px; }
+.insight-card .insight-btn:hover { opacity:0.85; }
+.insight-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.insight-stat { text-align:center; padding:16px; background:var(--border); border-radius:8px; }
+.insight-stat .num { font-size:28px; color:var(--accent); font-weight:bold; }
+.insight-stat .label { font-size:11px; color:var(--text3); margin-top:4px; }
 /* 节点脉冲 */
 @keyframes pulse { 0%,100%{filter:drop-shadow(0 0 4px rgba(194,53,49,0.3))} 50%{filter:drop-shadow(0 0 12px rgba(194,53,49,0.7))} }
 .famous-pulse { animation: pulse 2s ease-in-out infinite; }
@@ -202,6 +227,7 @@ HEADER_HTML = """
             <button class="tab active" data-tab="network">🕸️ 网络图</button>
             <button class="tab" data-tab="map">🗺️ 地图</button>
             <button class="tab" data-tab="stats">📊 统计</button>
+            <button class="tab" data-tab="insights">💡 洞察</button>
         </div>
         <div class="legend" id="legend">
             <div class="legend-item" data-period="初唐"><div class="legend-dot" style="background:#61a0a8"></div>初唐</div>
@@ -214,8 +240,18 @@ HEADER_HTML = """
     </div>
 </div>
 <div class="view active" id="graph"></div>
-<div class="view" id="mapView"></div>
+<div class="view" id="mapView">
+    <div class="map-timeline" id="mapTimeline">
+        <label>⏱️ 时间线</label>
+        <button onclick="mapTimelinePlay()">▶ 播放</button>
+        <input type="range" id="yearSlider" min="618" max="907" value="750" step="1">
+        <span class="year-display" id="yearDisplay">750</span>
+        <span class="period-display" id="periodDisplay">盛唐</span>
+        <span class="count-display" id="countDisplay">0 位诗人</span>
+    </div>
+</div>
 <div class="view" id="statsView"></div>
+<div class="view" id="insightsView"></div>
 <div class="legend-help">
     <span>节点大小 = 诗作数量</span><span>连线粗细 = 赠诗次数</span><span>拖拽 · 缩放 · 点击探索</span>
 </div>
@@ -312,11 +348,13 @@ function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     currentTab = tab;
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.getElementById(tab === 'network' ? 'graph' : tab === 'map' ? 'mapView' : 'statsView').classList.add('active');
+    const viewId = tab === 'network' ? 'graph' : tab === 'map' ? 'mapView' : tab === 'stats' ? 'statsView' : 'insightsView';
+    document.getElementById(viewId).classList.add('active');
     document.querySelector('.legend-help').style.display = tab === 'network' ? 'flex' : 'none';
     document.querySelector('.legend').style.display = tab === 'network' ? 'flex' : 'none';
     if (tab === 'map' && !mapInitialized) initMap();
     if (tab === 'stats' && !statsInitialized) initStats();
+    if (tab === 'insights' && !insightsInitialized) initInsights();
 }
 
 // ============ 网络图 ============
@@ -368,12 +406,28 @@ function dragEnd(e,d) { if(!e.active) simulation.alphaTarget(0); d.fx=null; d.fy
 
 // ============ 地图 ============
 let mapInitialized = false, map;
+let mapMarkers = L.layerGroup();
+let mapGeoNodes = [];
 function initMap() {
     mapInitialized = true;
     map = L.map('mapView').setView([34, 110], 4);
     L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', { subdomains:['1','2','3','4'], attribution:'&copy; 高德地图', maxZoom:18 }).addTo(map);
-    const geoNodes = DATA.nodes.filter(n => n.lng && n.lat);
-    geoNodes.forEach(n => {
+    mapMarkers.addTo(map);
+    mapGeoNodes = DATA.nodes.filter(n => n.lng && n.lat);
+    updateMapMarkers(618, 907);
+
+    // 时间线滑动条事件
+    const slider = document.getElementById('yearSlider');
+    slider.addEventListener('input', function() { updateMapMarkers(618, parseInt(this.value)); });
+}
+
+function updateMapMarkers(minYear, maxYear) {
+    mapMarkers.clearLayers();
+    const active = mapGeoNodes.filter(n => {
+        if (!n.birthYear || n.birthYear <= 0) return false;
+        return n.birthYear >= minYear && n.birthYear <= maxYear;
+    });
+    active.forEach(n => {
         const color = PERIOD_COLORS[n.period] || '#999';
         const r = Math.max(3, Math.min(12, 3 + Math.sqrt(n.poemCount||1)*0.8));
         const circle = L.circleMarker([n.lat, n.lng], { radius:r, fillColor:color, color:'#fff', weight:1, fillOpacity:0.8 });
@@ -388,8 +442,33 @@ function initMap() {
             h += '<div style="margin-top:6px"><a href="javascript:void(0)" onclick="switchTab(\'network\');searchAndFocus(\''+n.id+'\')" style="color:#c23531;font-size:11px">在网络图中查看 →</a></div></div>';
             circle.bindPopup(h, {maxWidth:280}).openPopup();
         });
-        circle.addTo(map);
+        circle.addTo(mapMarkers);
     });
+
+    // 更新显示
+    const year = maxYear;
+    document.getElementById('yearDisplay').textContent = year;
+    let period = '未知';
+    if (year >= 618 && year < 713) period = '初唐';
+    else if (year >= 713 && year < 766) period = '盛唐';
+    else if (year >= 766 && year < 836) period = '中唐';
+    else if (year >= 836 && year <= 907) period = '晚唐';
+    document.getElementById('periodDisplay').textContent = period;
+    document.getElementById('countDisplay').textContent = active.length + ' 位诗人';
+}
+
+let mapTimelinePlaying = false;
+function mapTimelinePlay() {
+    if (mapTimelinePlaying) return;
+    mapTimelinePlaying = true;
+    const slider = document.getElementById('yearSlider');
+    let year = 618;
+    const interval = setInterval(() => {
+        slider.value = year;
+        updateMapMarkers(618, year);
+        year += 3;
+        if (year > 907) { clearInterval(interval); mapTimelinePlaying = false; }
+    }, 100);
 }
 
 // ============ 统计 ============
@@ -453,6 +532,86 @@ function initStats() {
     new Chart(document.getElementById('chartDegree'), { type:'bar', data:{labels:degreeBins.map((b,i)=>{const n=degreeBins[i+1];return n?b+'-'+n:b+'+';}),datasets:[{label:'节点数',data:degreeDist,backgroundColor:'rgba(47,69,84,0.6)'}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{type:'logarithmic'}}} });
     // 赠诗次数分布
     new Chart(document.getElementById('chartWeight'), { type:'bar', data:{labels:weightBins.map((b,i)=>{const n=weightBins[i+1];return n?b+'-'+n:b+'+';}),datasets:[{label:'关系数',data:weightDist,backgroundColor:'rgba(212,130,101,0.6)'}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{type:'logarithmic'}}} });
+}
+
+// ============ 数据洞察 ============
+let insightsInitialized = false;
+function initInsights() {
+    insightsInitialized = true;
+    const sv = document.getElementById('insightsView');
+
+    // 计算孤立诗人（有诗但无关系）
+    const isolatedPoets = DATA.nodes.filter(n => n.poemCount > 0 && n.totalDegree === 0);
+    // 计算平均路径长度（采样）
+    const adj = new Map();
+    edgesFiltered.forEach(e => { const s=e.source.id||e.source, t=e.target.id||e.target; if(!adj.has(s))adj.set(s,[]); if(!adj.has(t))adj.set(t,[]); adj.get(s).push(t); adj.get(t).push(s); });
+    // BFS 计算平均距离（采样100个节点）
+    const connectedNodes = DATA.nodes.filter(n => n.totalDegree > 0).map(n => n.id);
+    let totalDist = 0, distCount = 0;
+    const sampleSize = Math.min(100, connectedNodes.length);
+    for (let i = 0; i < sampleSize; i++) {
+        const start = connectedNodes[Math.floor(Math.random() * connectedNodes.length)];
+        const visited = new Map(); visited.set(start, 0);
+        const queue = [start];
+        while (queue.length > 0) {
+            const curr = queue.shift();
+            for (const next of (adj.get(curr) || [])) {
+                if (!visited.has(next)) { visited.set(next, visited.get(curr) + 1); queue.push(next); }
+            }
+        }
+        visited.forEach((dist, node) => { if (node !== start && dist > 0) { totalDist += dist; distCount++; } });
+    }
+    const avgPath = distCount > 0 ? (totalDist / distCount).toFixed(1) : 'N/A';
+
+    // 最繁忙的诗人
+    const busiest = DATA.nodes.filter(n => n.totalDegree > 0).sort((a,b) => b.totalDegree - a.totalDegree).slice(0, 5);
+    // 诗作最多但关系最少
+    const lonelyPoets = DATA.nodes.filter(n => n.poemCount >= 50 && n.totalDegree <= 3).sort((a,b) => b.poemCount - a.poemCount).slice(0, 5);
+    // 地理中心（按朝代）
+    const geoByPeriod = {};
+    ['初唐','盛唐','中唐','晚唐'].forEach(p => {
+        const nodes = DATA.nodes.filter(n => n.period === p && n.lng && n.lat);
+        if (nodes.length > 0) {
+            const avgLng = nodes.reduce((s,n) => s + n.lng, 0) / nodes.length;
+            const avgLat = nodes.reduce((s,n) => s + n.lat, 0) / nodes.length;
+            geoByPeriod[p] = { lng: avgLng.toFixed(1), lat: avgLat.toFixed(1), count: nodes.length };
+        }
+    });
+
+    sv.innerHTML = '<div class="insights-container">'
+        + '<div class="insight-card"><h3>🔍 数据全景</h3>'
+        + '<div class="insight-grid">'
+        + '<div class="insight-stat"><div class="num">' + DATA.nodes.length + '</div><div class="label">诗人总数</div></div>'
+        + '<div class="insight-stat"><div class="num">' + edgesFiltered.length + '</div><div class="label">赠诗关系</div></div>'
+        + '<div class="insight-stat"><div class="num">' + poemIndex.length + '</div><div class="label">收录诗作</div></div>'
+        + '<div class="insight-stat"><div class="num">' + avgPath + '</div><div class="label">平均距离（步）</div></div>'
+        + '</div></div>'
+
+        + '<div class="insight-card"><h3>👑 唐代社交之王</h3>'
+        + '<p>这些诗人拥有最广泛的社交网络，是唐代文人圈的核心节点。</p>'
+        + busiest.map(n => '<div class="data-row"><span class="data-label"><b>' + n.id + '</b> (' + n.period + ')</span><span>' + n.totalDegree + ' 条关系 · ' + (n.poemCount||0) + ' 首诗</span></div>').join('')
+        + '<button class="insight-btn" onclick="searchAndFocus(\'' + busiest[0].id + '\')">探索 ' + busiest[0].id + ' 的网络</button></div>'
+
+        + '<div class="insight-card"><h3>🏔️ 最「孤独」的高产诗人</h3>'
+        + '<p>这些诗人写了大量诗作，但在赠诗关系网络中却很少出现。他们可能是隐士、游侠，或者只是数据的缺失。</p>'
+        + lonelyPoets.map(n => '<div class="data-row"><span class="data-label"><b>' + n.id + '</b> (' + n.period + ')</span><span>' + (n.poemCount||0) + ' 首诗 · 仅 ' + n.totalDegree + ' 条关系</span></div>').join('')
+        + '</div>'
+
+        + '<div class="insight-card"><h3>🌍 诗歌地理中心迁移</h3>'
+        + '<p>从初唐到晚唐，诗歌的地理中心如何移动？</p>'
+        + Object.entries(geoByPeriod).map(([p, d]) => '<div class="data-row"><span class="data-label"><b>' + p + '</b></span><span>中心: (' + d.lat + '°N, ' + d.lng + '°E) · ' + d.count + ' 位诗人</span></div>').join('')
+        + '<button class="insight-btn" onclick="switchTab(\'map\');mapTimelinePlay()">观看时间线动画</button></div>'
+
+        + '<div class="insight-card"><h3>🏝️ 孤立的诗人</h3>'
+        + '<p>这些诗人有作品传世，但在赠诗关系网络中完全没有连接。共 <span class="highlight">' + isolatedPoets.length + '</span> 位。</p>'
+        + (isolatedPoets.length > 0 ? isolatedPoets.slice(0, 10).map(n => '<div class="data-row"><span class="data-label"><b>' + n.id + '</b> (' + n.period + ')</span><span>' + (n.poemCount||0) + ' 首诗</span></div>').join('') : '<p>所有有作品的诗人都有至少一条关系。</p>')
+        + '</div>'
+
+        + '<div class="insight-card"><h3>💡 关于这些数据</h3>'
+        + '<p>这些数据来自 <a href="https://projects.iq.harvard.edu/cbdb" target="_blank" style="color:var(--accent)">CBDB（中国历代人物传记资料库）</a>的赠诗关系数据和 <a href="https://github.com/chinese-poetry/chinese-poetry" target="_blank" style="color:var(--accent)">chinese-poetry</a> 的唐诗全文。</p>'
+        + '<p>平均距离通过 BFS 算法在连通分量中采样计算。地理中心为诗人籍贯坐标的算术平均值。</p>'
+        + '<p>数据的局限性：赠诗关系仅记录了有文献记载的交往，实际的文人交流远比数据丰富。</p>'
+        + '</div></div>';
 }
 
 // ============ 路径输入自动补全 ============
@@ -622,7 +781,7 @@ document.addEventListener('click', e => { if(!e.target.closest('.search-wrap'))a
 document.addEventListener('keydown', e => {
     if(e.key==='/'&&document.activeElement!==searchInput&&!document.querySelector('.modal-overlay.show')){e.preventDefault();searchInput.focus();}
     if(e.key==='Escape'){if(document.querySelector('.modal-overlay.show'))closeModal();else if(document.getElementById('onboarding').classList.contains('show'))closeOnboarding();else closePanel();}
-    if(e.key==='Tab'&&document.activeElement===document.body){e.preventDefault();const tabs=['network','map','stats'];switchTab(tabs[(tabs.indexOf(currentTab)+1)%tabs.length]);}
+    if(e.key==='Tab'&&document.activeElement===document.body){e.preventDefault();const tabs=['network','map','stats','insights'];switchTab(tabs[(tabs.indexOf(currentTab)+1)%tabs.length]);}
 });
 
 // ============ 搜索聚焦 ============
