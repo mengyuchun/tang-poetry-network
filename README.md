@@ -93,12 +93,6 @@ python build_html.py
 ```
 
 ## 效果演示
-/dist/
-
-
-
-
-
 
 
 <img width="3071" height="1919" alt="首页引导" src="https://github.com/user-attachments/assets/a481a359-3975-497c-8c8d-1d04d9a12dda" />
@@ -106,13 +100,13 @@ python build_html.py
 <img width="3058" height="1644" alt="网络图" src="https://github.com/user-attachments/assets/b3f05d2c-3020-4b15-ab82-a73fb1fd179e" /> 
 2. **搜索「诗人名」或「诗句」** — 展示全文搜索结果
 <img width="3071" height="1640" alt="搜索功能" src="https://github.com/user-attachments/assets/377acc90-42ac-4c2d-988a-9cefc93773f6" />
-3. **李白→杜甫关系路径** — 展示杀手级功能
+3. **李白→杜甫关系路径** — 展示两位诗人直接的直接或间接关系
 <img width="3072" height="1752" alt="唐诗社交网络_2026-05-29" src="https://github.com/user-attachments/assets/f8ab1f20-5d68-4c53-9d9d-3b00e4c32a2f" />
 4. **统计面板** — 展示图表和数据
 <img width="3049" height="1639" alt="统计图" src="https://github.com/user-attachments/assets/96929d99-6aac-47a0-b371-dffc3a0b2755" />
 5. **地图视图** — 展示地理分布
 <img width="3071" height="1639" alt="地图" src="https://github.com/user-attachments/assets/ace52569-1712-4976-ba39-addeb0fd0f90" />
-6. **深色模式** — 展示暗色主题效果
+6. **深色模式** — 暗色主题效果
 
 
 ## License
