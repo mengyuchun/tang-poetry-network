@@ -177,7 +177,7 @@ body.dark::before { background: radial-gradient(ellipse at 20% 50%,rgba(100,80,1
 .map-timeline label { font-size:12px; color:var(--text); white-space:nowrap; }
 .map-timeline input[type=range] { flex:1; height:4px; -webkit-appearance:none; background:var(--border); border-radius:2px; outline:none; }
 .map-timeline input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; background:var(--accent); border-radius:50%; cursor:pointer; }
-.map-timeline .year-display { font-size:16px; font-weight:bold; color:var(--accent); min-width:50px; text-align:center; }
+.map-timeline .year-display { font-size:20px; font-weight:bold; color:var(--accent); min-width:60px; text-align:center; }
 .map-timeline .period-display { font-size:11px; color:var(--text3); }
 .map-timeline button { padding:3px 10px; background:var(--accent); color:#fff; border:none; border-radius:3px; font-size:11px; cursor:pointer; font-family:inherit; }
 .map-timeline button:hover { opacity:0.85; }
@@ -432,7 +432,7 @@ function updateMapMarkers(minYear, maxYear) {
     const active = mapGeoNodes.filter(n => {
         if (!n.birthYear || n.birthYear <= 0) return false;
         const death = n.deathYear || (n.birthYear + 60); // 无死亡年则估算60岁
-        return n.birthYear <= maxYear && death >= minYear; // 在时间窗口内活跃
+        return n.birthYear <= maxYear && death >= maxYear; // 在当前年份还活着
     });
     active.forEach(n => {
         const color = PERIOD_COLORS[n.period] || '#999';
