@@ -121,10 +121,15 @@ body.dark::before { background: radial-gradient(ellipse at 20% 50%,rgba(100,80,1
 .relation-item b { color:var(--text); }
 .path-finder { background:var(--border); border-radius:8px; padding:14px; margin-bottom:16px; }
 .path-finder h3 { font-size:14px; margin-bottom:10px; color:var(--text); }
-.path-inputs { display:flex; gap:6px; align-items:center; margin-bottom:10px; }
-.path-inputs input { flex:1; padding:5px 8px; border:1px solid var(--border); border-radius:4px; font-family:inherit; font-size:12px; outline:none; background:var(--card); color:var(--text); }
-.path-inputs input:focus { border-color:var(--accent); }
-.path-inputs span { color:var(--text3); font-size:12px; }
+.path-inputs { display:flex; gap:6px; align-items:center; margin-bottom:10px; position:relative; }
+.path-input-wrap { flex:1; position:relative; }
+.path-input-wrap input { width:100%; padding:5px 8px; border:1px solid var(--border); border-radius:4px; font-family:inherit; font-size:12px; outline:none; background:var(--card); color:var(--text); }
+.path-input-wrap input:focus { border-color:var(--accent); }
+.path-ac { position:absolute; top:100%; left:0; width:100%; max-height:180px; overflow-y:auto; background:var(--header); border-radius:0 0 4px 4px; display:none; z-index:210; }
+.path-ac-item { padding:5px 8px; color:var(--headerText); font-size:11px; cursor:pointer; display:flex; justify-content:space-between; }
+.path-ac-item:hover, .path-ac-item.active { background:rgba(194,53,49,0.3); }
+.path-ac-item .ac-pd { width:6px; height:6px; border-radius:50%; margin-right:5px; display:inline-block; }
+.path-inputs .path-sep { color:var(--text3); font-size:12px; flex-shrink:0; }
 .path-btn { padding:5px 14px; background:var(--accent); color:#fff; border:none; border-radius:4px; font-size:12px; cursor:pointer; font-family:inherit; }
 .path-btn:hover { opacity:0.85; }
 .path-result { margin-top:10px; }
@@ -221,9 +226,15 @@ HEADER_HTML = """
             <div class="path-finder">
                 <h3>🔍 诗人关系路径</h3>
                 <div class="path-inputs">
-                    <input type="text" id="pathFrom" placeholder="诗人A">
-                    <span>→</span>
-                    <input type="text" id="pathTo" placeholder="诗人B">
+                    <div class="path-input-wrap">
+                        <input type="text" id="pathFrom" placeholder="诗人A" autocomplete="off">
+                        <div class="path-ac" id="pathFromAc"></div>
+                    </div>
+                    <span class="path-sep">→</span>
+                    <div class="path-input-wrap">
+                        <input type="text" id="pathTo" placeholder="诗人B" autocomplete="off">
+                        <div class="path-ac" id="pathToAc"></div>
+                    </div>
                     <button class="path-btn" onclick="findPath()">查找</button>
                 </div>
                 <div id="pathResult" class="path-result"></div>
@@ -379,17 +390,92 @@ function initStats() {
     const pd = STATS.periodDist, tp = STATS.topPoets, ns = STATS.networkStats;
     const periods = ['初唐','盛唐','中唐','晚唐','未知'];
     const pColors = periods.map(p => PERIOD_COLORS[p]||'#999');
+
+    // 诗作数 TOP 20
+    const topByPoems = DATA.nodes.filter(n => n.poemCount > 0).sort((a,b) => b.poemCount - a.poemCount).slice(0, 20);
+    // 诗作数分布
+    const poemBins = [0,1,5,10,50,100,500,1000,3000];
+    const poemDist = poemBins.map((b,i) => { const next = poemBins[i+1] || 99999; return DATA.nodes.filter(n => n.poemCount >= b && n.poemCount < next).length; });
+    // 关系权重分布
+    const weightBins = [1,2,3,5,10,20,50];
+    const weightDist = weightBins.map((b,i) => { const next = weightBins[i+1] || 999; return edgesFiltered.filter(e => e.weight >= b && e.weight < next).length; });
+    // 连接度分布
+    const degreeBins = [0,1,2,5,10,20,50,100,200];
+    const degreeDist = degreeBins.map((b,i) => { const next = degreeBins[i+1] || 999; return DATA.nodes.filter(n => n.totalDegree >= b && n.totalDegree < next).length; });
+
     sv.innerHTML = '<div class="stats-summary">'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+DATA.nodes.length+'</div><div class="stats-summary-label">诗人总数</div></div>'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+edgesFiltered.length+'</div><div class="stats-summary-label">赠诗关系</div></div>'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+poemIndex.length+'</div><div class="stats-summary-label">收录诗作</div></div>'
         + '<div class="stats-summary-item"><div class="stats-summary-num">'+ns.avgDegree+'</div><div class="stats-summary-label">平均连接度</div></div>'
+        + '<div class="stats-summary-item"><div class="stats-summary-num">'+ns.maxDegree+'</div><div class="stats-summary-label">最大连接度</div></div>'
+        + '<div class="stats-summary-item"><div class="stats-summary-num">'+ns.isolatedNodes+'</div><div class="stats-summary-label">孤立节点</div></div>'
+        + '<div class="stats-summary-item"><div class="stats-summary-num">'+topByPoems[0]?.id+'</div><div class="stats-summary-label">诗作最多</div></div>'
+        + '<div class="stats-summary-item"><div class="stats-summary-num">'+tp[0]?.id+'</div><div class="stats-summary-label">关系最多</div></div>'
         + '</div><div class="stats-grid">'
         + '<div class="stats-card"><h3>📊 朝代分布</h3><canvas id="chartPeriod"></canvas></div>'
-        + '<div class="stats-card"><h3>🏆 最具影响力诗人 TOP 20</h3><canvas id="chartTop"></canvas></div></div>';
+        + '<div class="stats-card"><h3>🏆 社交影响力 TOP 20</h3><canvas id="chartTop"></canvas></div>'
+        + '<div class="stats-card"><h3>📝 诗作数量 TOP 20</h3><canvas id="chartPoems"></canvas></div>'
+        + '<div class="stats-card"><h3>📈 诗作数量分布</h3><canvas id="chartPoemDist"></canvas></div>'
+        + '<div class="stats-card"><h3>🔗 连接度分布</h3><canvas id="chartDegree"></canvas></div>'
+        + '<div class="stats-card"><h3>📊 赠诗次数分布</h3><canvas id="chartWeight"></canvas></div>'
+        + '</div>'
+        + '<div style="margin-top:24px;padding:16px;background:var(--card);border:1px solid var(--border);border-radius:8px;text-align:center">'
+        + '<div style="font-size:14px;color:var(--text);margin-bottom:8px">关于本项目</div>'
+        + '<div style="font-size:12px;color:var(--text2);line-height:1.8">'
+        + '数据来源：<a href="https://projects.iq.harvard.edu/cbdb" target="_blank" style="color:var(--accent)">CBDB 中国历代人物传记资料库</a>（Harvard University）'
+        + ' + <a href="https://github.com/chinese-poetry/chinese-poetry" target="_blank" style="color:var(--accent)">chinese-poetry</a>（全唐诗）<br>'
+        + '技术栈：D3.js · Leaflet.js · Chart.js · html2canvas<br>'
+        + '项目地址：<a href="https://github.com/mengyuchun/tang-poetry-network" target="_blank" style="color:var(--accent)">GitHub</a>'
+        + ' · License: MIT<br>'
+        + '<span style="color:var(--text3)">如果觉得有趣，请给个 Star ⭐</span>'
+        + '</div></div>';
+
+    // 朝代分布
     new Chart(document.getElementById('chartPeriod'), { type:'doughnut', data:{labels:periods,datasets:[{data:periods.map(p=>pd[p]||0),backgroundColor:pColors,borderWidth:0}]}, options:{responsive:true,plugins:{legend:{position:'bottom'}}} });
+    // 社交影响力 TOP 20
     new Chart(document.getElementById('chartTop'), { type:'bar', data:{labels:tp.map(p=>p.id),datasets:[{label:'赠诗',data:tp.map(p=>p.outDegree),backgroundColor:'rgba(194,53,49,0.7)'},{label:'被赠',data:tp.map(p=>p.inDegree),backgroundColor:'rgba(47,69,84,0.7)'}]}, options:{indexAxis:'y',responsive:true,scales:{x:{stacked:true},y:{stacked:true}},plugins:{legend:{position:'bottom'}}} });
+    // 诗作数量 TOP 20
+    new Chart(document.getElementById('chartPoems'), { type:'bar', data:{labels:topByPoems.map(p=>p.id),datasets:[{label:'诗作数',data:topByPoems.map(p=>p.poemCount),backgroundColor:'rgba(97,160,168,0.7)'}]}, options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}} } });
+    // 诗作数量分布
+    new Chart(document.getElementById('chartPoemDist'), { type:'bar', data:{labels:poemBins.map((b,i)=>{const n=poemBins[i+1];return n?b+'-'+n:b+'+';}),datasets:[{label:'诗人数',data:poemDist,backgroundColor:'rgba(194,53,49,0.6)'}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{type:'logarithmic'}}} });
+    // 连接度分布
+    new Chart(document.getElementById('chartDegree'), { type:'bar', data:{labels:degreeBins.map((b,i)=>{const n=degreeBins[i+1];return n?b+'-'+n:b+'+';}),datasets:[{label:'节点数',data:degreeDist,backgroundColor:'rgba(47,69,84,0.6)'}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{type:'logarithmic'}}} });
+    // 赠诗次数分布
+    new Chart(document.getElementById('chartWeight'), { type:'bar', data:{labels:weightBins.map((b,i)=>{const n=weightBins[i+1];return n?b+'-'+n:b+'+';}),datasets:[{label:'关系数',data:weightDist,backgroundColor:'rgba(212,130,101,0.6)'}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{type:'logarithmic'}}} });
 }
+
+// ============ 路径输入自动补全 ============
+function setupPathAc(inputId, acId) {
+    const input = document.getElementById(inputId);
+    const ac = document.getElementById(acId);
+    let idx = -1;
+    input.addEventListener('input', function() {
+        const q = this.value.trim();
+        if (!q) { ac.style.display = 'none'; return; }
+        const matches = DATA.nodes.filter(n => n.id.includes(q)).slice(0, 8);
+        if (matches.length === 0) { ac.style.display = 'none'; return; }
+        idx = -1;
+        ac.innerHTML = matches.map((m, i) => {
+            const c = PERIOD_COLORS[m.period] || '#999';
+            return '<div class="path-ac-item" data-idx="' + i + '" data-name="' + m.id + '"><span><span class="ac-pd" style="background:' + c + '"></span>' + m.id + '</span><span style="font-size:10px;color:rgba(245,240,232,0.4)">' + (m.poemCount || 0) + '首</span></div>';
+        }).join('');
+        ac.style.display = 'block';
+        ac.querySelectorAll('.path-ac-item').forEach(item => {
+            item.addEventListener('click', () => { input.value = item.dataset.name; ac.style.display = 'none'; });
+        });
+    });
+    input.addEventListener('keydown', function(e) {
+        const items = ac.querySelectorAll('.path-ac-item');
+        if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, items.length - 1); items.forEach((it, i) => it.classList.toggle('active', i === idx)); if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' }); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); items.forEach((it, i) => it.classList.toggle('active', i === idx)); if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' }); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (idx >= 0 && items[idx]) { input.value = items[idx].dataset.name; ac.style.display = 'none'; } else { findPath(); ac.style.display = 'none'; } }
+        else if (e.key === 'Escape') { ac.style.display = 'none'; }
+    });
+    input.addEventListener('blur', () => setTimeout(() => ac.style.display = 'none', 200));
+}
+setupPathAc('pathFrom', 'pathFromAc');
+setupPathAc('pathTo', 'pathToAc');
 
 // ============ 路径查找 ============
 function findPath() {
