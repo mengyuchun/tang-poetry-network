@@ -251,7 +251,7 @@ HEADER_HTML = """
 </div>
 <div class="view" id="statsView"></div>
 <div class="legend-help">
-    <span>节点大小 = 诗作数量</span><span>连线粗细 = 赠诗次数</span><span>拖拽 · 缩放 · 点击探索</span>
+    <span>节点大小 = 关系数量</span><span>箭头方向 = 赠诗方向</span><span>🔴 赠出 · 🔵 收到</span><span>拖拽 · 缩放 · 点击探索</span>
 </div>
 <div class="panel" id="panel">
     <button class="panel-close" onclick="closePanel()" title="关闭 (Esc)">×</button>
@@ -358,11 +358,19 @@ function switchTab(tab) {
 const container = document.getElementById('graph');
 const width = container.clientWidth, height = container.clientHeight;
 const svg = d3.select('#graph').append('svg').attr('width', width).attr('height', height);
+// 箭头标记
+const defs = svg.append('defs');
+defs.append('marker').attr('id','arrow-default').attr('viewBox','0 0 10 10').attr('refX',10).attr('refY',5).attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
+    .append('path').attr('d','M 0 0 L 10 5 L 0 10 z').attr('fill','rgba(44,44,44,0.25)');
+defs.append('marker').attr('id','arrow-out').attr('viewBox','0 0 10 10').attr('refX',10).attr('refY',5).attr('markerWidth',7).attr('markerHeight',7).attr('orient','auto')
+    .append('path').attr('d','M 0 0 L 10 5 L 0 10 z').attr('fill','#e74c3c');
+defs.append('marker').attr('id','arrow-in').attr('viewBox','0 0 10 10').attr('refX',10).attr('refY',5).attr('markerWidth',7).attr('markerHeight',7).attr('orient','auto')
+    .append('path').attr('d','M 0 0 L 10 5 L 0 10 z').attr('fill','#3498db');
 const g = svg.append('g');
 const zoom = d3.zoom().scaleExtent([0.1, 8]).on('zoom', e => g.attr('transform', e.transform));
 svg.call(zoom);
 
-function getNodeRadius(d) { return Math.max(3, Math.min(25, 3 + Math.sqrt(d.poemCount||1) * 1.5)); }
+function getNodeRadius(d) { return Math.max(4, Math.min(30, 4 + Math.sqrt(d.totalDegree||1) * 1.2)); }
 
 const simulation = d3.forceSimulation(DATA.nodes)
     .force('link', d3.forceLink(edgesFiltered).id(d => d.id).distance(80))
@@ -372,10 +380,11 @@ const simulation = d3.forceSimulation(DATA.nodes)
 
 const link = g.append('g').selectAll('line').data(edgesFiltered).join('line')
     .attr('stroke','rgba(44,44,44,0.15)').attr('stroke-width', d => Math.max(0.5, Math.min(3, d.weight*0.5)))
+    .attr('marker-end','url(#arrow-default)')
     .style('cursor','pointer')
     .on('click', (e,d) => showEdgeDetail(d))
-    .on('mouseover', function(e,d) { d3.select(this).attr('stroke','rgba(194,53,49,0.7)').attr('stroke-width',Math.max(2,d.weight*0.8)); showTooltip(e,(d.source.id||d.source)+' → '+(d.target.id||d.target)+' ('+d.weight+'次)'); })
-    .on('mouseout', function(e,d) { d3.select(this).attr('stroke','rgba(44,44,44,0.15)').attr('stroke-width',Math.max(0.5,d.weight*0.5)); hideTooltip(); });
+    .on('mouseover', function(e,d) { d3.select(this).attr('stroke','rgba(194,53,49,0.7)').attr('stroke-width',Math.max(2,d.weight*0.8)); showTooltip(e,(d.source.id||d.source)+' 赠诗给 '+(d.target.id||d.target)+' ('+d.weight+'次)'); })
+    .on('mouseout', function(e,d) { d3.select(this).attr('stroke','rgba(44,44,44,0.15)').attr('stroke-width',Math.max(0.5,d.weight*0.5)).attr('marker-end','url(#arrow-default)'); hideTooltip(); });
 
 const node = g.append('g').selectAll('circle').data(DATA.nodes).join('circle')
     .attr('r', d => getNodeRadius(d)).attr('fill', d => PERIOD_COLORS[d.period]||'#999')
@@ -383,7 +392,7 @@ const node = g.append('g').selectAll('circle').data(DATA.nodes).join('circle')
     .classed('famous-pulse', d => famousPoets.has(d.id))
     .call(d3.drag().on('start',dragStart).on('drag',dragging).on('end',dragEnd))
     .on('click', (e,d) => showNodeDetail(d))
-    .on('mouseover', function(e,d) { d3.select(this).attr('stroke','#c23531').attr('stroke-width',3); let tip=d.id; if(d.birthYear)tip+=' ('+d.birthYear+'-'+(d.deathYear||'?')+')'; tip+=' '+(d.poemCount||0)+'首 '+d.totalDegree+'条'; showTooltip(e,tip); highlightNode(d); })
+    .on('mouseover', function(e,d) { d3.select(this).attr('stroke','#c23531').attr('stroke-width',3); let tip=d.id; if(d.birthYear)tip+=' ('+d.birthYear+'-'+(d.deathYear||'?')+')'; tip+=' | '+(d.poemCount||0)+'首诗 | '+d.totalDegree+'条关系'; showTooltip(e,tip); highlightNode(d); })
     .on('mouseout', function() { d3.select(this).attr('stroke','#f5f0e8').attr('stroke-width',1); hideTooltip(); resetHighlight(); });
 
 const label = g.append('g').selectAll('text').data(DATA.nodes.filter(d => d.totalDegree >= 5)).join('text')
@@ -427,7 +436,7 @@ function updateMapMarkers(minYear, maxYear) {
     });
     active.forEach(n => {
         const color = PERIOD_COLORS[n.period] || '#999';
-        const r = Math.max(3, Math.min(12, 3 + Math.sqrt(n.poemCount||1)*0.8));
+        const r = Math.max(3, Math.min(12, 3 + Math.sqrt(n.totalDegree||1)*0.6));
         const circle = L.circleMarker([n.lat, n.lng], { radius:r, fillColor:color, color:'#fff', weight:1, fillOpacity:0.8 });
         circle.bindTooltip(n.id+' ('+(n.poemCount||0)+'首)', {direction:'top', offset:[0,-r]});
         circle.on('click', () => {
@@ -635,7 +644,7 @@ function findPath() {
     const pathSet = new Set(found), pathEdges = new Set();
     for (let i=0;i<found.length-1;i++) { const a=found[i],b=found[i+1]; edgesFiltered.forEach(e=>{const s=e.source.id||e.source,t=e.target.id||e.target;if((s===a&&t===b)||(s===b&&t===a))pathEdges.add(e);}); }
     node.attr('opacity', n => pathSet.has(n.id)?1:0.08);
-    link.attr('stroke', e => pathEdges.has(e)?'var(--accent)':'rgba(44,44,44,0.03)').attr('stroke-width', e => pathEdges.has(e)?3:0.3);
+    link.attr('stroke', e => pathEdges.has(e)?'var(--accent)':'rgba(44,44,44,0.03)').attr('stroke-width', e => pathEdges.has(e)?3:0.3).attr('marker-end', e => pathEdges.has(e)?'url(#arrow-out)':'url(#arrow-default)');
     label.attr('opacity', n => pathSet.has(n.id)?1:0.08);
 }
 function setPath(a,b) { document.getElementById('pathFrom').value=a; document.getElementById('pathTo').value=b; findPath(); }
@@ -679,13 +688,14 @@ function highlightNode(d) {
     const c = new Set(); c.add(d.id);
     edgesFiltered.forEach(e => { const s=e.source.id||e.source, t=e.target.id||e.target; if(s===d.id)c.add(t); if(t===d.id)c.add(s); });
     node.attr('opacity', n => c.has(n.id)?1:0.08);
-    link.attr('stroke', e => { const s=e.source.id||e.source, t=e.target.id||e.target; return (s===d.id||t===d.id)?'rgba(194,53,49,0.6)':'rgba(44,44,44,0.03)'; })
-        .attr('stroke-width', e => { const s=e.source.id||e.source, t=e.target.id||e.target; return (s===d.id||t===d.id)?Math.max(1.5,e.weight*0.8):Math.max(0.3,e.weight*0.3); });
+    link.attr('stroke', e => { const s=e.source.id||e.source, t=e.target.id||e.target; if(s===d.id) return '#e74c3c'; if(t===d.id) return '#3498db'; return 'rgba(44,44,44,0.03)'; })
+        .attr('stroke-width', e => { const s=e.source.id||e.source, t=e.target.id||e.target; return (s===d.id||t===d.id)?Math.max(2,e.weight*1):Math.max(0.3,e.weight*0.3); })
+        .attr('marker-end', e => { const s=e.source.id||e.source, t=e.target.id||e.target; if(s===d.id) return 'url(#arrow-out)'; if(t===d.id) return 'url(#arrow-in)'; return 'url(#arrow-default)'; });
     label.attr('opacity', n => c.has(n.id)?1:0.08);
 }
 function resetHighlight() {
     node.attr('opacity', d => activePeriods.has(d.period)?0.85:0.05);
-    link.attr('stroke','rgba(44,44,44,0.15)').attr('stroke-width', d => Math.max(0.5,d.weight*0.5));
+    link.attr('stroke','rgba(44,44,44,0.15)').attr('stroke-width', d => Math.max(0.5,d.weight*0.5)).attr('marker-end','url(#arrow-default)');
     label.attr('opacity', 1);
 }
 
@@ -776,8 +786,8 @@ function showNodeDetail(d) {
     if(d.place) bioInfo.push('\u{1F4CD} '+d.place);
     if(bioInfo.length > 0) h+='<div style="color:var(--text3);font-size:12px;margin-bottom:10px">'+bioInfo.join(' · ')+'</div>';
     h+='<div class="panel-stats"><div class="panel-stat" onclick="showPoemsModal(\''+d.id+'\')"><div class="panel-stat-num">'+(d.poemCount||0)+'</div><div class="panel-stat-label">诗作</div></div>';
-    h+='<div class="panel-stat" onclick="showRelationsModal(\''+d.id+'\',\'out\')"><div class="panel-stat-num">'+d.outDegree+'</div><div class="panel-stat-label">赠诗</div></div>';
-    h+='<div class="panel-stat" onclick="showRelationsModal(\''+d.id+'\',\'in\')"><div class="panel-stat-num">'+d.inDegree+'</div><div class="panel-stat-label">被赠</div></div></div>';
+    h+='<div class="panel-stat" onclick="showRelationsModal(\''+d.id+'\',\'out\')"><div class="panel-stat-num" style="color:#e74c3c">'+d.outDegree+'</div><div class="panel-stat-label">赠出 🔴</div></div>';
+    h+='<div class="panel-stat" onclick="showRelationsModal(\''+d.id+'\',\'in\')"><div class="panel-stat-num" style="color:#3498db">'+d.inDegree+'</div><div class="panel-stat-label">收到 🔵</div></div></div>';
     if(poems.length>0){h+='<div class="panel-section"><h3>代表诗作 ';if(poems.length>5)h+='<span class="view-all" onclick="showPoemsModal(\''+d.id+'\')">全部 '+poems.length+' 首 →</span>';h+='</h3>';poems.slice(0,5).forEach(p=>{h+='<div class="poem-card"><div class="poem-title">《'+p.title+'》</div><div class="poem-text">'+p.text+'</div></div>';});h+='</div>';}
     if(rels.length>0){h+='<div class="panel-section"><h3>社交关系 ('+rels.length+') ';if(rels.length>15)h+='<span class="view-all" onclick="showRelationsModal(\''+d.id+'\',\'all\')">全部 →</span>';h+='</h3>';rels.slice(0,15).forEach(r=>{h+='<div class="relation-item" onclick="searchAndFocus(\''+r.name+'\')"><b>'+r.name+'</b> — '+r.dir+' '+r.weight+'次</div>';});h+='</div>';}
     panel.innerHTML=h;history.replaceState(null,'','#'+encodeURIComponent(d.id));
@@ -787,7 +797,7 @@ function showEdgeDetail(d) {
     const panel=document.getElementById('panelContent');document.getElementById('panelEmpty').style.display='none';panel.style.display='block';
     document.getElementById('panel').classList.remove('hidden');document.getElementById('panelToggle').textContent='◀';
     const s=d.source.id||d.source,t=d.target.id||d.target;const sn=nodeMap.get(s),tn=nodeMap.get(t);
-    let h='<div class="panel-title">'+s+' \u{2194} '+t+'</div><div style="color:var(--text3);font-size:12px;margin-bottom:12px">赠诗 '+d.weight+' 次</div>';
+    let h='<div class="panel-title">'+s+' → '+t+'</div><div style="color:var(--text3);font-size:12px;margin-bottom:12px"><span style="color:#e74c3c">'+s+'</span> 赠诗给 <span style="color:#3498db">'+t+'</span> · '+d.weight+' 次</div>';
     [['src',s,sn],['tgt',t,tn]].forEach(([k,n,nd])=>{const ps=(nd?.poems||[]).slice(0,5);h+='<div class="panel-section"><h3>'+n+' 的诗作</h3>';if(ps.length>0){ps.forEach(p=>{h+='<div class="poem-card"><div class="poem-title">《'+p.title+'》</div><div class="poem-text">'+p.text+'</div></div>';});}else{h+='<div style="color:var(--text3)">暂无诗作</div>';}h+='</div>';});
     panel.innerHTML=h;
 }
