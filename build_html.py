@@ -77,7 +77,7 @@ body.dark::before { background: radial-gradient(ellipse at 20% 50%,rgba(100,80,1
 .quick-btn:hover { background:rgba(194,53,49,0.35); border-color:var(--accent); }
 .fun-btn { padding:3px 9px; background:rgba(194,53,49,0.25); border:1px solid rgba(194,53,49,0.4); border-radius:3px; color:var(--headerText); font-size:11px; cursor:pointer; font-family:inherit; transition:all 0.2s; }
 .fun-btn:hover { background:rgba(194,53,49,0.5); }
-.icon-btn { width:30px; height:30px; background:rgba(245,240,232,0.08); border:1px solid rgba(245,240,232,0.15); border-radius:4px; color:var(--headerText); font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
+.icon-btn { padding:4px 10px; background:rgba(245,240,232,0.08); border:1px solid rgba(245,240,232,0.15); border-radius:4px; color:var(--headerText); font-size:11px; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:3px; transition:all 0.2s; white-space:nowrap; }
 .icon-btn:hover { background:rgba(245,240,232,0.15); }
 .tabs { display:flex; gap:2px; }
 .tab { padding:5px 14px; background:rgba(245,240,232,0.08); border:none; color:rgba(245,240,232,0.5); font-size:12px; cursor:pointer; font-family:inherit; border-radius:4px 4px 0 0; transition:all 0.2s; }
@@ -183,7 +183,7 @@ LOADING_HTML = '<div class="loading" id="loading"><div class="spinner"></div><di
 
 HEADER_HTML = """
 <div class="header">
-    <h1>唐 诗 社 交 网 络</h1>
+    <h1 style="cursor:pointer" onclick="goHome()" title="回到首页">唐 诗 社 交 网 络</h1>
     <div class="header-center">
         <div class="search-wrap">
             <div class="search-box"><input type="text" id="searchInput" placeholder="搜索诗人、诗题、诗句... (/)"></div>
@@ -193,15 +193,15 @@ HEADER_HTML = """
             <button class="quick-btn" onclick="searchAndFocus('李白')">李白</button>
             <button class="quick-btn" onclick="searchAndFocus('杜甫')">杜甫</button>
             <button class="quick-btn" onclick="searchAndFocus('白居易')">白居易</button>
-            <button class="fun-btn" onclick="randomPoet()">🎲</button>
-            <button class="fun-btn" onclick="showDailyPoet()">📅</button>
+            <button class="fun-btn" onclick="randomPoet()">🎲 随机</button>
+            <button class="fun-btn" onclick="showDailyPoet()">📅 每日</button>
         </div>
     </div>
     <div class="header-right">
         <div class="tabs">
-            <button class="tab active" data-tab="network">🕸️</button>
-            <button class="tab" data-tab="map">🗺️</button>
-            <button class="tab" data-tab="stats">📊</button>
+            <button class="tab active" data-tab="network">🕸️ 网络图</button>
+            <button class="tab" data-tab="map">🗺️ 地图</button>
+            <button class="tab" data-tab="stats">📊 统计</button>
         </div>
         <div class="legend" id="legend">
             <div class="legend-item" data-period="初唐"><div class="legend-dot" style="background:#61a0a8"></div>初唐</div>
@@ -209,8 +209,8 @@ HEADER_HTML = """
             <div class="legend-item" data-period="中唐"><div class="legend-dot" style="background:#2f4554"></div>中唐</div>
             <div class="legend-item" data-period="晚唐"><div class="legend-dot" style="background:#d48265"></div>晚唐</div>
         </div>
-        <button class="icon-btn" onclick="toggleDark()" title="深色模式">🌙</button>
-        <button class="icon-btn" onclick="takeScreenshot()" title="截图分享">📷</button>
+        <button class="icon-btn" onclick="toggleDark()" title="深色模式">🌙 暗色</button>
+        <button class="icon-btn" onclick="takeScreenshot()" title="截图分享">📷 截图</button>
     </div>
 </div>
 <div class="view active" id="graph"></div>
@@ -284,6 +284,16 @@ if (localStorage.getItem('tpn_dark') === '1') document.body.classList.add('dark'
 // 面板开关
 function togglePanel() { const p = document.getElementById('panel'); p.classList.toggle('hidden'); document.getElementById('panelToggle').textContent = p.classList.contains('hidden') ? '▶' : '◀'; }
 function closePanel() { document.getElementById('panelContent').style.display = 'none'; document.getElementById('panelEmpty').style.display = 'flex'; resetHighlight(); }
+
+// 回到首页
+function goHome() {
+    switchTab('network');
+    closePanel();
+    resetHighlight();
+    searchInput.value = '';
+    history.replaceState(null, '', location.pathname);
+    svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity.translate(width/2, height/2).scale(1));
+}
 
 // 数据
 const nodeMap = new Map(DATA.nodes.map(n => [n.id, n]));
@@ -361,7 +371,7 @@ let mapInitialized = false, map;
 function initMap() {
     mapInitialized = true;
     map = L.map('mapView').setView([34, 110], 4);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution:'&copy; OpenStreetMap', maxZoom:18 }).addTo(map);
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', { subdomains:['1','2','3','4'], attribution:'&copy; 高德地图', maxZoom:18 }).addTo(map);
     const geoNodes = DATA.nodes.filter(n => n.lng && n.lat);
     geoNodes.forEach(n => {
         const color = PERIOD_COLORS[n.period] || '#999';
