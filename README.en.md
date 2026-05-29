@@ -2,66 +2,96 @@
 
 > 1,381 poets · 8,259 gift-poem relationships · 57,607 poems · Interactive exploration
 
-Visualize the social network of Tang Dynasty poets through their gift-poem relationships. Who wrote poems to whom? What was Li Bai's social circle like? What's the shortest path between any two poets?
+Visualize the social network of Tang Dynasty poets through their gift-poem relationships. Who wrote poems to whom? What's the shortest path between any two poets? What stories does the data tell?
 
-Built with data from [CBDB (China Biographical Database)](https://projects.iq.harvard.edu/cbdb) and [chinese-poetry](https://github.com/chinese-poetry/chinese-poetry).
+🏮 **Live Demo:** https://mengyuchun.github.io/tang-poetry-network/
 
-## ✨ Features
+## Features
 
 ### Three Views
-- **🕸️ Network** — D3.js force-directed graph, drag to explore relationships
-- **🗺️ Map** — Leaflet.js geographic distribution of poets' hometowns
-- **📊 Statistics** — Chart.js interactive charts (era distribution, top 20 influential poets)
+| 🕸️ Network | 🗺️ Map | 📊 Statistics |
+|:---:|:---:|:---:|
+| D3.js force graph | Amap (Chinese tiles) | Chart.js charts |
+| Drag to explore | Timeline animation | Distribution · TOP 20 |
 
-### Interactive
-- **Full-text search** — Search by poet name, poem title, or poem content
-- **Poet connection path** — Find the shortest relationship chain between any two poets
-- **Era filtering** — Click legend to toggle Early/High/Mid/Late Tang
-- **Detail modals** — Click numbers to view complete poem lists or social connections
-- **Random poet** — 🎲 button for random exploration
-- **URL routing** — Share links to specific poets
+### Core Features
+- **📖 Poet Story** — Select a poet, auto-generate a data story (word frequency, place names, imagery analysis)
+- **🔍 Full-text Search** — Search by poet name, poem title, or poem content
+- **🔗 Poet Connection Path** — Find the shortest relationship chain between any two poets
+- **📅 Daily Poet** — Daily recommendation of a poet and their representative works
+- **🎲 Random Poet** — Random exploration
+- **🌙 Dark Mode** — One-click toggle
+- **📷 Screenshot** — Save current view as PNG
+- **🗺️ Timeline Animation** — Slide time window to watch geographic distribution change
+- **⌨️ Keyboard Shortcuts** — `/` search · `Tab` switch view · `Esc` close
 
-### Design
-- Chinese ink-wash aesthetic
-- Node size = poem count
-- Edge thickness = gift-poem frequency
-- Color-coded by era: Early Tang (cyan) · High Tang (red) · Mid Tang (navy) · Late Tang (orange)
+### Poet Story Page
+Click any poet → "📖 View Story" → Auto-generates:
 
-## 🚀 Usage
+| Section | Content |
+|---------|---------|
+| Life Timeline | Birth/death year visualization |
+| Data Overview | Poem count, sent/received |
+| Social Network | Top 10 sent/received |
+| Representative Poems | First 5 full text |
+| Top Words | jieba segmentation TOP 10 |
+| Place Names | Tang dynasty place dictionary |
+| Imagery | Moon, wind, flower, snow, wine... |
+| Data Insight | Auto-generated narrative |
+
+## Usage
 
 **Zero dependencies, just download and open:**
 
-1. Download [`index.html`](index.html)
+1. Download [`index.html`](index.html) (~13MB, all data embedded)
 2. Double-click to open (or drag into browser)
 3. Start exploring
 
 > Requires internet for D3.js, Leaflet.js, Chart.js (CDN). Data is embedded.
 
-**Live demo:** https://mengyuchun.github.io/tang-poetry-network/
-
-## 📊 Data Sources
+## Data Sources
 
 | Source | Content | Origin |
 |--------|---------|--------|
-| CBDB | 8,259 Tang gift-poem relationships | Harvard University |
+| CBDB | 8,259 Tang gift-poem relationships + birth/death years + gender + coordinates | Harvard University |
 | chinese-poetry | 57,607 Tang poems (full text) | Open source community |
 
-## 🔍 Discoveries
+## Keyboard Shortcuts
 
-**Social King:** Bai Juyi has 306 gift-poem relationships — the most connected node in the Tang literary network.
+| Key | Function |
+|-----|----------|
+| `/` | Focus search box |
+| `Tab` | Switch view (Network/Map/Stats) |
+| `Esc` | Close panel/modal/story |
+| `↑` `↓` | Navigate search results |
+| `Enter` | Select search result |
 
-**Poetry King:** Bai Juyi has 3,009 surviving poems, Du Fu has 1,489, Li Bai has 1,207.
+## Local Development
 
-**Li Bai's Circle:** Li Bai exchanged poems with Du Fu, He Zhizhang, Gao Shi, Meng Haoran, and many others.
+```bash
+# Requires CBDB database (latest.db) and conda environment
+conda activate data_env
+pip install -r requirements.txt
 
-## 🛠 Tech Stack
+# Extract data (requires latest.db)
+python extract_data.py
+
+# Build HTML
+python build_html.py
+
+# Output in dist/index.html
+```
+
+## Tech Stack
 
 - **D3.js v7** — Force-directed network graph
-- **Leaflet.js** — Interactive map
+- **Leaflet.js** — Interactive map (Amap Chinese tiles)
 - **Chart.js** — Statistics charts
+- **html2canvas** — Screenshot feature
+- **jieba** — Chinese text segmentation (text analysis)
 - **Single HTML file** — Data embedded, zero dependencies
 
-## 📜 License
+## License
 
 MIT
 
