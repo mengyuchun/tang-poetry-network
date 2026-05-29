@@ -202,6 +202,51 @@ body.dark::before { background: radial-gradient(ellipse at 20% 50%,rgba(100,80,1
 .famous-pulse { animation: pulse 2s ease-in-out infinite; }
 /* 深色模式图表 */
 body.dark .stats-card canvas { filter: brightness(0.9); }
+/* 诗人故事页面 */
+.story-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:var(--bg); z-index:600; overflow-y:auto; display:none; }
+.story-overlay.show { display:block; }
+.story-container { max-width:800px; margin:0 auto; padding:40px 24px; }
+.story-close { position:fixed; top:16px; right:24px; width:36px; height:36px; background:var(--border); border:none; border-radius:50%; font-size:18px; color:var(--text3); cursor:pointer; z-index:610; display:flex; align-items:center; justify-content:center; }
+.story-close:hover { background:var(--accent); color:#fff; }
+.story-header { text-align:center; margin-bottom:32px; }
+.story-header h1 { font-size:32px; color:var(--text); letter-spacing:4px; margin-bottom:8px; }
+.story-header .story-subtitle { font-size:14px; color:var(--text3); }
+.story-header .story-bio { font-size:13px; color:var(--text2); margin-top:8px; line-height:1.8; }
+.story-timeline { position:relative; padding:20px 0; margin-bottom:32px; }
+.story-timeline-bar { height:4px; background:var(--border); border-radius:2px; position:relative; margin:0 40px; }
+.story-timeline-fill { position:absolute; top:0; left:0; height:100%; background:var(--accent); border-radius:2px; }
+.story-timeline-label { position:absolute; top:-20px; font-size:11px; color:var(--text3); }
+.story-timeline-label.left { left:0; }
+.story-timeline-label.right { right:0; }
+.story-timeline-label.center { left:50%; transform:translateX(-50%); }
+.story-section { margin-bottom:28px; }
+.story-section h2 { font-size:18px; color:var(--text); border-bottom:2px solid var(--accent); padding-bottom:6px; margin-bottom:14px; display:inline-block; }
+.story-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:28px; }
+.story-stat { text-align:center; padding:14px; background:var(--card); border:1px solid var(--border); border-radius:8px; }
+.story-stat .num { font-size:24px; color:var(--accent); font-weight:bold; }
+.story-stat .label { font-size:11px; color:var(--text3); margin-top:3px; }
+.story-rel-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.story-rel-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:14px; }
+.story-rel-card h4 { font-size:14px; color:var(--text); margin-bottom:10px; }
+.story-rel-item { display:flex; justify-content:space-between; padding:4px 0; font-size:12px; color:var(--text2); border-bottom:1px solid var(--border); cursor:pointer; }
+.story-rel-item:hover { color:var(--accent); }
+.story-rel-item:last-child { border-bottom:none; }
+.story-word-cloud { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.story-word-tag { padding:4px 10px; background:var(--border); border-radius:12px; font-size:12px; color:var(--text2); }
+.story-word-tag .cnt { color:var(--accent); margin-left:4px; }
+.story-place-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.story-place-tag { padding:4px 10px; background:rgba(194,53,49,0.1); border:1px solid rgba(194,53,49,0.2); border-radius:12px; font-size:12px; color:var(--accent); }
+.story-place-tag .cnt { margin-left:4px; }
+.story-imagery-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.story-imagery-tag { padding:4px 10px; background:rgba(47,69,84,0.1); border:1px solid rgba(47,69,84,0.2); border-radius:12px; font-size:12px; color:#2f4554; }
+body.dark .story-imagery-tag { color:#61a0a8; border-color:rgba(97,160,168,0.3); background:rgba(97,160,168,0.1); }
+.story-imagery-tag .cnt { margin-left:4px; }
+.story-insight { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:16px; font-size:13px; color:var(--text2); line-height:1.8; }
+.story-actions { text-align:center; margin-top:32px; display:flex; gap:12px; justify-content:center; }
+.story-btn { padding:8px 20px; border:1px solid var(--border); border-radius:4px; font-size:13px; cursor:pointer; font-family:inherit; background:var(--card); color:var(--text); transition:all 0.2s; }
+.story-btn:hover { border-color:var(--accent); color:var(--accent); }
+.story-btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.story-btn.primary:hover { opacity:0.85; }
 """
 
 LOADING_HTML = '<div class="loading" id="loading"><div class="spinner"></div><div class="loading-text">唐 诗 社 交 网 络</div><div class="loading-sub">正在加载 57,607 首唐诗...</div></div>'
@@ -296,6 +341,10 @@ HEADER_HTML = """
         <div class="modal-search"><input type="text" id="modalSearch" placeholder="搜索..."></div>
         <div class="modal-body" id="modalBody"></div>
     </div>
+</div>
+<div class="story-overlay" id="storyOverlay">
+    <button class="story-close" onclick="closeStory()">×</button>
+    <div class="story-container" id="storyContent"></div>
 </div>
 <div class="onboarding" id="onboarding">
     <div class="onboarding-card">
@@ -702,7 +751,7 @@ function resetHighlight() {
 // ============ 时期过滤 ============
 function applyFilter() {
     node.attr('opacity', d => activePeriods.has(d.period)?0.85:0.05).attr('pointer-events', d => activePeriods.has(d.period)?'auto':'none');
-    link.attr('opacity', d => { const s=d.source.id||e.source, t=d.target.id||e.target; const sn=nodeMap.get(s),tn=nodeMap.get(t); return(sn&&activePeriods.has(sn.period)&&tn&&activePeriods.has(tn.period))?1:0.03; });
+    link.attr('opacity', d => { const s=d.source.id||d.source, t=d.target.id||d.target; const sn=nodeMap.get(s),tn=nodeMap.get(t); return(sn&&activePeriods.has(sn.period)&&tn&&activePeriods.has(tn.period))?1:0.03; });
     label.attr('opacity', d => activePeriods.has(d.period)?1:0.05);
     document.querySelectorAll('.legend-item').forEach(el => el.classList.toggle('inactive', !activePeriods.has(el.dataset.period)));
 }
@@ -788,6 +837,8 @@ function showNodeDetail(d) {
     h+='<div class="panel-stats"><div class="panel-stat" onclick="showPoemsModal(\''+d.id+'\')"><div class="panel-stat-num">'+(d.poemCount||0)+'</div><div class="panel-stat-label">诗作</div></div>';
     h+='<div class="panel-stat" onclick="showRelationsModal(\''+d.id+'\',\'out\')"><div class="panel-stat-num" style="color:#e74c3c">'+d.outDegree+'</div><div class="panel-stat-label">赠出 🔴</div></div>';
     h+='<div class="panel-stat" onclick="showRelationsModal(\''+d.id+'\',\'in\')"><div class="panel-stat-num" style="color:#3498db">'+d.inDegree+'</div><div class="panel-stat-label">收到 🔵</div></div></div>';
+    // 故事按钮
+    h+='<div style="margin-bottom:14px"><button class="story-btn primary" onclick="showStory(\''+d.id+'\')">📖 查看 '+d.id+' 的故事</button></div>';
     if(poems.length>0){h+='<div class="panel-section"><h3>代表诗作 ';if(poems.length>5)h+='<span class="view-all" onclick="showPoemsModal(\''+d.id+'\')">全部 '+poems.length+' 首 →</span>';h+='</h3>';poems.slice(0,5).forEach(p=>{h+='<div class="poem-card"><div class="poem-title">《'+p.title+'》</div><div class="poem-text">'+p.text+'</div></div>';});h+='</div>';}
     if(rels.length>0){h+='<div class="panel-section"><h3>社交关系 ('+rels.length+') ';if(rels.length>15)h+='<span class="view-all" onclick="showRelationsModal(\''+d.id+'\',\'all\')">全部 →</span>';h+='</h3>';rels.slice(0,15).forEach(r=>{h+='<div class="relation-item" onclick="searchAndFocus(\''+r.name+'\')"><b>'+r.name+'</b> — '+r.dir+' '+r.weight+'次</div>';});h+='</div>';}
     panel.innerHTML=h;history.replaceState(null,'','#'+encodeURIComponent(d.id));
@@ -811,6 +862,171 @@ document.getElementById('modalSearch').addEventListener('input',function(){const
 document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('modalOverlay'))closeModal();});
 function showPoemsModal(n){const d=nodeMap.get(n);if(!d)return;showModal(n+' 的诗作 ('+(d.poemCount||0)+'首)',d.poems||[],'poems');}
 function showRelationsModal(n,dir){const d=nodeMap.get(n);if(!d)return;const r=getRelations(d);let f=r,t=n+' 的社交关系';if(dir==='out'){f=r.filter(r=>r.dir==='赠诗给');t=n+' 赠诗给...';}if(dir==='in'){f=r.filter(r=>r.dir==='收到赠诗');t='赠诗给 '+n+' 的人...';}showModal(t+' ('+f.length+'人)',f,'relations');}
+
+// ============ 诗人故事 ============
+function showStory(name) {
+    const d = nodeMap.get(name);
+    if (!d) return;
+
+    const rels = getRelations(d);
+    const outRels = rels.filter(r => r.dir === '赠诗给').slice(0, 10);
+    const inRels = rels.filter(r => r.dir === '收到赠诗').slice(0, 10);
+    const ta = d.textAnalysis;
+    const poems = (d.poems || []).slice(0, 5);
+
+    // 生命时间线
+    const birth = d.birthYear || '?';
+    const death = d.deathYear || '?';
+    const age = d.deathAge || '';
+    const lifeSpan = (d.birthYear && d.deathYear) ? d.deathYear - d.birthYear : 60;
+    const lifePercent = Math.min(100, Math.max(10, lifeSpan / 80 * 100));
+
+    let h = '<div class="story-header">';
+    h += '<h1>' + name + '</h1>';
+    h += '<div class="story-subtitle">' + d.period;
+    if (d.female) h += ' · ♀';
+    if (d.place) h += ' · ' + d.place;
+    h += '</div>';
+    h += '<div class="story-bio">';
+    if (d.birthYear) h += '生于 ' + d.birthYear + ' 年';
+    if (d.deathYear) h += '，卒于 ' + d.deathYear + ' 年';
+    if (d.deathAge) h += '，享年 ' + d.deathAge + ' 岁';
+    h += '</div></div>';
+
+    // 时间线
+    h += '<div class="story-timeline"><div class="story-timeline-bar">';
+    h += '<div class="story-timeline-fill" style="width:' + lifePercent + '%"></div>';
+    h += '<span class="story-timeline-label left">' + birth + ' 出生</span>';
+    if (d.birthYear && d.deathYear) {
+        const mid = Math.round((d.birthYear + d.deathYear) / 2);
+        h += '<span class="story-timeline-label center">' + mid + '</span>';
+    }
+    h += '<span class="story-timeline-label right">' + death + ' 去世</span>';
+    h += '</div></div>';
+
+    // 数据概览
+    h += '<div class="story-stats">';
+    h += '<div class="story-stat"><div class="num">' + (d.poemCount || 0) + '</div><div class="label">首诗</div></div>';
+    h += '<div class="story-stat"><div class="num">' + d.outDegree + '</div><div class="label">赠出</div></div>';
+    h += '<div class="story-stat"><div class="num">' + d.inDegree + '</div><div class="label">收到</div></div>';
+    h += '<div class="story-stat"><div class="num">' + rels.length + '</div><div class="label">社交关系</div></div>';
+    h += '</div>';
+
+    // 社交网络
+    if (rels.length > 0) {
+        h += '<div class="story-section"><h2>社交网络</h2><div class="story-rel-grid">';
+        if (outRels.length > 0) {
+            h += '<div class="story-rel-card"><h4 style="color:#e74c3c">赠出诗给</h4>';
+            outRels.forEach(r => {
+                h += '<div class="story-rel-item" onclick="closeStory();searchAndFocus(\'' + r.name + '\')"><span>' + r.name + '</span><span>' + r.weight + ' 次</span></div>';
+            });
+            h += '</div>';
+        }
+        if (inRels.length > 0) {
+            h += '<div class="story-rel-card"><h4 style="color:#3498db">收到赠诗</h4>';
+            inRels.forEach(r => {
+                h += '<div class="story-rel-item" onclick="closeStory();searchAndFocus(\'' + r.name + '\')"><span>' + r.name + '</span><span>' + r.weight + ' 次</span></div>';
+            });
+            h += '</div>';
+        }
+        h += '</div></div>';
+    }
+
+    // 代表诗作
+    if (poems.length > 0) {
+        h += '<div class="story-section"><h2>代表诗作</h2>';
+        poems.forEach(p => {
+            h += '<div class="poem-card"><div class="poem-title">《' + p.title + '》</div><div class="poem-text">' + p.text + '</div></div>';
+        });
+        if ((d.poemCount || 0) > 5) {
+            h += '<div style="text-align:center;margin-top:8px"><button class="story-btn" onclick="closeStory();showPoemsModal(\'' + d.id + '\')">查看全部 ' + d.poemCount + ' 首 →</button></div>';
+        }
+        h += '</div>';
+    }
+
+    // 文本分析
+    if (ta) {
+        if (ta.topWords && ta.topWords.length > 0) {
+            h += '<div class="story-section"><h2>高频词</h2><div class="story-word-cloud">';
+            ta.topWords.forEach(w => {
+                h += '<span class="story-word-tag">' + w.word + '<span class="cnt">' + w.count + '</span></span>';
+            });
+            h += '</div></div>';
+        }
+
+        if (ta.places && ta.places.length > 0) {
+            h += '<div class="story-section"><h2>诗中地名</h2><div class="story-place-list">';
+            ta.places.forEach(p => {
+                h += '<span class="story-place-tag">' + p.place + '<span class="cnt">' + p.count + ' 次</span></span>';
+            });
+            h += '</div></div>';
+        }
+
+        if (ta.imagery && ta.imagery.length > 0) {
+            h += '<div class="story-section"><h2>高频意象</h2><div class="story-imagery-list">';
+            ta.imagery.forEach(w => {
+                h += '<span class="story-imagery-tag">' + w.word + '<span class="cnt">' + w.count + ' 次</span></span>';
+            });
+            h += '</div></div>';
+        }
+    }
+
+    // 数据洞察
+    h += '<div class="story-section"><h2>数据洞察</h2><div class="story-insight">';
+    h += '<p>' + name + '是' + d.period + '诗人';
+    if (d.poemCount > 0) h += '，共有 <b>' + d.poemCount + '</b> 首诗作传世';
+    if (rels.length > 0) h += '，与 <b>' + rels.length + '</b> 位诗人有赠诗关系';
+    h += '。</p>';
+    if (d.outDegree > 0 && d.inDegree > 0) {
+        const ratio = (d.outDegree / d.inDegree).toFixed(1);
+        h += '<p>赠出与收到的比例为 ' + ratio + ':1';
+        if (ratio > 1.5) h += '，说明 ' + name + ' 是一位主动社交的诗人';
+        else if (ratio < 0.7) h += '，说明 ' + name + ' 受到其他诗人的广泛关注';
+        else h += '，说明 ' + name + ' 的社交关系较为均衡';
+        h += '。</p>';
+    }
+    if (ta && ta.places && ta.places.length > 0) {
+        h += '<p>在诗作中提及最多的地名是 <b>' + ta.places[0].place + '</b>（' + ta.places[0].count + ' 次）';
+        if (ta.places.length > 1) h += '，其次是 <b>' + ta.places[1].place + '</b>（' + ta.places[1].count + ' 次）';
+        h += '。</p>';
+    }
+    if (ta && ta.topWords && ta.topWords.length > 0) {
+        h += '<p>诗作中出现最多的词语是 <b>' + ta.topWords[0].word + '</b>（' + ta.topWords[0].count + ' 次）';
+        if (ta.topWords.length > 1) h += '和 <b>' + ta.topWords[1].word + '</b>（' + ta.topWords[1].count + ' 次）';
+        h += '。</p>';
+    }
+    h += '</div>';
+
+    // 操作按钮
+    h += '<div class="story-actions">';
+    h += '<button class="story-btn primary" onclick="closeStory();searchAndFocus(\'' + d.id + '\')">在网络图中探索</button>';
+    h += '<button class="story-btn" onclick="shareStory(\'' + d.id + '\')">分享此页面</button>';
+    h += '</div>';
+
+    document.getElementById('storyContent').innerHTML = h;
+    document.getElementById('storyOverlay').classList.add('show');
+    history.replaceState(null, '', '#story/' + encodeURIComponent(name));
+}
+
+function closeStory() {
+    document.getElementById('storyOverlay').classList.remove('show');
+    history.replaceState(null, '', location.pathname);
+}
+
+function shareStory(name) {
+    const url = location.origin + location.pathname + '#story/' + encodeURIComponent(name);
+    navigator.clipboard.writeText(url).then(() => alert('链接已复制！')).catch(() => {});
+}
+
+// URL 路由支持 story
+function handleStoryHash() {
+    const hash = location.hash;
+    if (hash.startsWith('#story/')) {
+        const name = decodeURIComponent(hash.slice(7));
+        if (nodeMap.has(name)) setTimeout(() => showStory(name), 500);
+    }
+}
+handleStoryHash();
 
 // ============ 引导 ============
 function closeOnboarding(){document.getElementById('onboarding').classList.remove('show');localStorage.setItem('tpn_visited','1');}

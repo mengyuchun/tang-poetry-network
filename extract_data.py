@@ -7,6 +7,9 @@ import pandas as pd
 import json
 import os
 import glob
+import re
+from collections import Counter
+import jieba
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'latest.db')
 POETRY_CACHE = os.path.join(os.path.dirname(__file__), '..', 'poetry_cache')
@@ -18,6 +21,84 @@ TANG_PERIODS = [
     (618, 713, '初唐'), (713, 766, '盛唐'), (766, 836, '中唐'), (836, 907, '晚唐')
 ]
 PERIOD_COLORS = {'初唐': '#61a0a8', '盛唐': '#c23531', '中唐': '#2f4554', '晚唐': '#d48265'}
+
+# 停用词（常见虚词和无意义词）
+STOP_WORDS = set('的了在是我有和人这中大为上个国不以到说时要就出会也年对自其')
+STOP_WORDS.update(['一个', '不能', '可以', '不知', '何人', '何处', '今日', '昨日', '明日',
+                    '万里', '千里', '百年', '千秋', '万古', '无人', '不知', '不见', '不得',
+                    '何以', '如此', '当年', '此时', '此地', '此中', '君不', '不见'])
+
+# 唐代常见地名
+TANG_PLACES = [
+    '长安', '洛阳', '成都', '杭州', '苏州', '扬州', '金陵', '南京', '江陵', '荆州',
+    '岳阳', '洞庭', '蜀道', '蜀中', '江南', '江北', '岭南', '关中', '中原', '河北',
+    '河南', '山东', '山西', '陕西', '甘肃', '凉州', '敦煌', '西域', '天山', '黄河',
+    '长江', '淮河', '汉水', '渭水', '泰山', '华山', '衡山', '嵩山', '峨眉', '庐山',
+    '黄山', '天台', '终南', '太行', '武陵', '桃花源', '赤壁', '姑苏', '会稽', '越州',
+    '温州', '福州', '泉州', '广州', '桂林', '昆明', '大理', '吐蕃', '南诏', '高丽',
+    '新罗', '日本', '蓬莱', '瀛洲', '瑶池', '昆仑', '崆峒', '青城', '峨嵋', '巫山',
+    '三峡', '瞿塘', '潇湘', '九嶷', '苍梧', '南海', '西湖', '太湖', '鄱阳', '洪州',
+    '宣州', '池州', '润州', '常州', '湖州', '越州', '衢州', '歙州', '袁州', '吉州',
+    '潭州', '衡州', '永州', '柳州', '连州', '潮州', '崖州', '儋州', '雷州', '琼州',
+]
+
+# 唐诗意象词
+IMAGERY_WORDS = [
+    '月', '风', '花', '雪', '雨', '云', '霜', '露', '烟', '霞',
+    '山', '水', '江', '河', '湖', '海', '溪', '泉', '潭', '瀑',
+    '酒', '茶', '琴', '棋', '书', '剑', '笛', '箫', '笙', '鼓',
+    '春', '夏', '秋', '冬', '朝', '暮', '夜', '晓', '昏', '晨',
+    '松', '竹', '梅', '兰', '菊', '荷', '桃', '柳', '桂', '枫',
+    '雁', '鹤', '莺', '燕', '蝉', '蝶', '马', '龙', '凤', '虎',
+    '梦', '泪', '愁', '恨', '思', '情', '心', '魂', '影', '声',
+    '天', '地', '日', '星', '光', '影', '色', '香', '寒', '暖',
+]
+
+
+def analyze_poems(poems):
+    """分析诗作的高频词、地名、意象"""
+    if not poems:
+        return {'topWords': [], 'places': [], 'imagery': []}
+
+    all_text = '\n'.join(p.get('text', '') for p in poems)
+
+    # 分词
+    words = jieba.lcut(all_text)
+    # 过滤：去掉停用词、单字（保留意象词中的单字）、数字
+    filtered = []
+    for w in words:
+        w = w.strip()
+        if len(w) == 0:
+            continue
+        if w in STOP_WORDS:
+            continue
+        if len(w) == 1 and w not in IMAGERY_WORDS:
+            continue
+        if re.match(r'^\d+$', w):
+            continue
+        filtered.append(w)
+
+    # 高频词 TOP 10
+    word_counts = Counter(filtered).most_common(10)
+    top_words = [{'word': w, 'count': c} for w, c in word_counts]
+
+    # 地名匹配
+    place_counts = Counter()
+    for place in TANG_PLACES:
+        cnt = all_text.count(place)
+        if cnt > 0:
+            place_counts[place] = cnt
+    places = [{'place': p, 'count': c} for p, c in place_counts.most_common(10)]
+
+    # 意象词匹配
+    imagery_counts = Counter()
+    for word in IMAGERY_WORDS:
+        cnt = all_text.count(word)
+        if cnt > 0:
+            imagery_counts[word] = cnt
+    imagery = [{'word': w, 'count': c} for w, c in imagery_counts.most_common(10)]
+
+    return {'topWords': top_words, 'places': places, 'imagery': imagery}
 
 
 def load_poems():
@@ -126,6 +207,9 @@ def build_nodes(edges, poems_by_author, poet_coords):
         coord = coord_map.get(name, {})
         period = '未知'  # 简化：后续通过关系推断
 
+        # 文本分析（仅对有诗作的诗人）
+        text_analysis = analyze_poems(representative) if poem_count > 0 else None
+
         nodes.append({
             'id': name,
             'poem_count': poem_count,
@@ -136,7 +220,8 @@ def build_nodes(edges, poems_by_author, poet_coords):
             'lng': coord.get('x'),
             'lat': coord.get('y'),
             'place': coord.get('place'),
-            'poems': representative
+            'poems': representative,
+            'textAnalysis': text_analysis
         })
 
     # 获取生卒年和性别
@@ -203,7 +288,8 @@ def main():
             'deathYear': n.get('death_year'),
             'deathAge': n.get('death_age'),
             'female': n.get('female', False),
-            'poems': n['poems']
+            'poems': n['poems'],
+            'textAnalysis': n.get('textAnalysis')
         })
 
     # 边
@@ -245,8 +331,11 @@ def main():
     timeline = []
     for n in nodes_out:
         if n['birthYear'] and n['birthYear'] > 600 and n['birthYear'] < 910:
+            real_death = n.get('deathYear')
+            est_death = n['birthYear'] + max(30, min(90, n['poemCount'] // 10 + 40)) if not real_death else None
             timeline.append({'id': n['id'], 'birthYear': n['birthYear'],
-                           'deathYear': n['birthYear'] + max(30, min(90, n['poemCount'] // 10 + 40)),
+                           'deathYear': real_death or est_death,
+                           'estimated': real_death is None,
                            'period': n['period'], 'poemCount': n['poemCount']})
     timeline.sort(key=lambda x: x['birthYear'])
 
