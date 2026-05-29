@@ -109,6 +109,8 @@ body::before { content:''; position:fixed; top:0; left:0; right:0; bottom:0; bac
 #statsView { overflow-y:auto; padding:24px; background:rgba(245,240,232,0.95); }
 .legend-help { position:fixed; bottom:36px; left:0; right:360px; height:28px; background:rgba(245,240,232,0.85); display:flex; align-items:center; justify-content:center; gap:24px; font-size:11px; color:#888; z-index:99; border-top:1px solid rgba(44,44,44,0.1); }
 .panel { position:fixed; top:56px; right:0; bottom:36px; width:360px; background:rgba(245,240,232,0.95); border-left:1px solid rgba(44,44,44,0.15); overflow-y:auto; z-index:50; padding:20px; backdrop-filter:blur(8px); }
+.panel-close { position:absolute; top:12px; right:12px; width:28px; height:28px; border:none; background:rgba(44,44,44,0.08); color:#888; font-size:16px; cursor:pointer; border-radius:4px; display:flex; align-items:center; justify-content:center; z-index:10; }
+.panel-close:hover { background:rgba(44,44,44,0.15); color:#2c2c2c; }
 .panel-empty { display:flex; align-items:center; justify-content:center; height:100%; color:#999; font-size:15px; text-align:center; line-height:2; }
 .panel-title { font-size:24px; color:#2c2c2c; margin-bottom:8px; letter-spacing:2px; }
 .panel-period { display:inline-block; padding:2px 10px; border-radius:3px; font-size:13px; color:#fff; margin-bottom:12px; }
@@ -231,6 +233,7 @@ HEADER_HTML = """
     <span>拖拽移动 · 滚轮缩放 · 点击探索</span>
 </div>
 <div class="panel" id="panel">
+    <button class="panel-close" onclick="closePanel()" title="关闭面板 (Esc)">×</button>
     <div class="panel-empty" id="panelEmpty">
         <div>
             <div class="path-finder">
@@ -371,7 +374,25 @@ function initMap() {
             radius: r, fillColor: color, color: '#fff', weight: 1, fillOpacity: 0.8
         });
         circle.bindTooltip(n.id + ' (' + (n.poemCount||0) + '首)', {direction:'top', offset:[0,-r]});
-        circle.on('click', () => { switchTab('network'); searchAndFocus(n.id); });
+        circle.on('click', () => {
+            const poems = (n.poems || []).slice(0, 3);
+            let popupHtml = '<div style="font-family:STKaiti,KaiTi,serif;min-width:200px">';
+            popupHtml += '<div style="font-size:16px;font-weight:bold;margin-bottom:4px">' + n.id + '</div>';
+            popupHtml += '<div style="font-size:12px;color:#888;margin-bottom:8px">' + n.period + (n.place ? ' · ' + n.place : '') + '</div>';
+            popupHtml += '<div style="font-size:12px;margin-bottom:8px">诗作: ' + (n.poemCount||0) + ' · 赠诗: ' + n.outDegree + ' · 被赠: ' + n.inDegree + '</div>';
+            if (poems.length > 0) {
+                popupHtml += '<div style="border-top:1px solid #eee;padding-top:6px;margin-top:4px">';
+                poems.forEach(p => {
+                    popupHtml += '<div style="font-size:11px;color:#555;margin-bottom:4px"><b>《' + p.title + '》</b></div>';
+                    const lines = p.text.split('\n').slice(0, 2).join('<br>');
+                    popupHtml += '<div style="font-size:11px;color:#888;margin-bottom:6px">' + lines + '</div>';
+                });
+                popupHtml += '</div>';
+            }
+            popupHtml += '<div style="margin-top:8px"><a href="javascript:void(0)" onclick="switchTab(\'network\');searchAndFocus(\'' + n.id + '\')" style="color:#c23531;font-size:12px">在网络图中查看 →</a></div>';
+            popupHtml += '</div>';
+            circle.bindPopup(popupHtml, {maxWidth: 300}).openPopup();
+        });
         circle.addTo(mapMarkers);
     });
 }
@@ -574,13 +595,20 @@ searchInput.addEventListener('keydown', function(e) {
 function updAC(items){items.forEach((it,i)=>it.classList.toggle('active',i===acIndex));if(items[acIndex])items[acIndex].scrollIntoView({block:'nearest'});}
 document.addEventListener('click', e => { if(!e.target.closest('.search-wrap')) acEl.style.display='none'; });
 
+// ============ 关闭面板 ============
+function closePanel() {
+    document.getElementById('panelContent').style.display = 'none';
+    document.getElementById('panelEmpty').style.display = 'flex';
+    resetHighlight();
+}
+
 // ============ 键盘 ============
 document.addEventListener('keydown', e => {
     if(e.key==='/' && document.activeElement!==searchInput && !document.querySelector('.modal-overlay.show')){e.preventDefault();searchInput.focus();}
     if(e.key==='Escape'){
         if(document.querySelector('.modal-overlay.show'))closeModal();
         else if(document.getElementById('onboarding').classList.contains('show'))closeOnboarding();
-        else{document.getElementById('panelContent').style.display='none';document.getElementById('panelEmpty').style.display='flex';resetHighlight();}
+        else{closePanel();}
     }
     if(e.key==='Tab' && document.activeElement===document.body){e.preventDefault();const tabs=['network','map','stats'];const idx=tabs.indexOf(currentTab);switchTab(tabs[(idx+1)%tabs.length]);}
 });
