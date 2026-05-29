@@ -1,6 +1,6 @@
 """
-唐诗社交网络 — 构建单文件 HTML（增强版）
-搜索增强 · 时期过滤 · 新手引导 · 数字点击弹窗 · 交互增强
+唐诗社交网络 — 构建单文件 HTML（v3 全功能版）
+全文搜索 · 时期过滤 · 新手引导 · 弹窗详情 · 加载动画 · URL路由
 """
 import json
 import os
@@ -24,7 +24,10 @@ def build():
     html += '<meta charset="UTF-8">\n'
     html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
     html += '<title>唐诗社交网络</title>\n'
+    html += '<meta name="description" content="1,381位诗人 · 8,259条赠诗关系 · 57,607首唐诗 · 交互式探索">\n'
+    html += '<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏮</text></svg>">\n'
     html += '<style>\n' + CSS + '\n</style>\n</head>\n<body>\n'
+    html += LOADING_HTML
     html += HEADER_HTML.format(
         total_poets=stats['total_poets'],
         total_edges=stats['total_edges'],
@@ -58,6 +61,22 @@ body::before {
         radial-gradient(ellipse at 50% 80%, rgba(190,170,140,0.1) 0%, transparent 50%);
     pointer-events: none; z-index: 0;
 }
+/* 加载动画 */
+.loading {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: #f5f0e8; z-index: 9999; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    transition: opacity 0.5s;
+}
+.loading.hide { opacity: 0; pointer-events: none; }
+.loading-text { font-size: 18px; color: #2c2c2c; letter-spacing: 4px; margin-top: 20px; }
+.loading-sub { font-size: 13px; color: #999; margin-top: 8px; }
+.spinner {
+    width: 40px; height: 40px; border: 3px solid rgba(44,44,44,0.1);
+    border-top-color: #c23531; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 /* 顶部栏 */
 .header {
     position: fixed; top: 0; left: 0; right: 0; height: 56px;
@@ -68,26 +87,34 @@ body::before {
 .header h1 { color: #f5f0e8; font-size: 20px; font-weight: 400; letter-spacing: 4px; white-space: nowrap; }
 /* 搜索框 */
 .search-wrap { position: relative; }
-.search-box { display: flex; align-items: center; gap: 8px; }
 .search-box input {
-    width: 240px; padding: 6px 12px; border: 1px solid rgba(245,240,232,0.3);
+    width: 320px; padding: 6px 12px; border: 1px solid rgba(245,240,232,0.3);
     border-radius: 4px; background: rgba(245,240,232,0.1); color: #f5f0e8;
     font-family: inherit; font-size: 14px; outline: none;
 }
 .search-box input::placeholder { color: rgba(245,240,232,0.5); }
 .search-box input:focus { border-color: #c23531; }
 .autocomplete {
-    position: absolute; top: 100%; left: 0; width: 240px; max-height: 300px;
+    position: absolute; top: 100%; left: 0; width: 400px; max-height: 400px;
     overflow-y: auto; background: rgba(44,44,44,0.95); border-radius: 0 0 4px 4px;
     display: none; z-index: 200; backdrop-filter: blur(8px);
 }
-.autocomplete-item {
+.ac-section { padding: 4px 12px; font-size: 10px; color: rgba(245,240,232,0.4); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid rgba(245,240,232,0.1); }
+.ac-item {
     padding: 8px 12px; color: #f5f0e8; font-size: 13px; cursor: pointer;
     display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid rgba(245,240,232,0.05);
 }
-.autocomplete-item:hover, .autocomplete-item.active { background: rgba(194,53,49,0.3); }
-.autocomplete-item .period-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.autocomplete-item .poem-cnt { font-size: 11px; color: rgba(245,240,232,0.6); }
+.ac-item:hover, .ac-item.active { background: rgba(194,53,49,0.3); }
+.ac-item .ac-left { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.ac-item .ac-period-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ac-item .ac-name { font-weight: bold; white-space: nowrap; }
+.ac-item .ac-context { font-size: 11px; color: rgba(245,240,232,0.6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-item .ac-right { font-size: 11px; color: rgba(245,240,232,0.5); white-space: nowrap; margin-left: 8px; }
+.ac-poem-match { padding: 6px 12px 6px 26px; }
+.ac-poem-match .ac-poem-title { font-size: 12px; color: rgba(245,240,232,0.7); }
+.ac-poem-match .ac-poem-line { font-size: 12px; color: rgba(245,240,232,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-highlight { color: #c23531; font-weight: bold; }
 /* 快速跳转 */
 .quick-nav { display: flex; gap: 6px; margin-left: 12px; }
 .quick-btn {
@@ -113,7 +140,6 @@ body::before {
     font-size: 13px; z-index: 100; backdrop-filter: blur(8px);
 }
 .stats-bar span { letter-spacing: 1px; }
-/* 图例说明 */
 .legend-help {
     position: fixed; bottom: 36px; left: 0; right: 360px; height: 28px;
     background: rgba(245,240,232,0.85); display: flex; align-items: center;
@@ -144,6 +170,8 @@ body::before {
 .panel-stat-label { font-size: 12px; color: #888; }
 .panel-section { margin-bottom: 16px; }
 .panel-section h3 { font-size: 15px; color: #2c2c2c; border-bottom: 1px solid rgba(44,44,44,0.15); padding-bottom: 6px; margin-bottom: 10px; }
+.panel-section h3 .view-all { font-size: 11px; color: #c23531; cursor: pointer; font-weight: normal; }
+.panel-section h3 .view-all:hover { text-decoration: underline; }
 .poem-card { background: rgba(255,255,255,0.6); border: 1px solid rgba(44,44,44,0.1); border-radius: 4px; padding: 12px; margin-bottom: 8px; }
 .poem-title { font-size: 14px; font-weight: bold; color: #2c2c2c; margin-bottom: 6px; }
 .poem-text { font-size: 13px; color: #555; line-height: 1.8; white-space: pre-line; }
@@ -172,9 +200,7 @@ body::before {
     align-items: center; justify-content: center;
 }
 .modal-close:hover { background: rgba(44,44,44,0.1); color: #2c2c2c; }
-.modal-search {
-    padding: 8px 20px; border-bottom: 1px solid rgba(44,44,44,0.1);
-}
+.modal-search { padding: 8px 20px; border-bottom: 1px solid rgba(44,44,44,0.1); }
 .modal-search input {
     width: 100%; padding: 6px 10px; border: 1px solid rgba(44,44,44,0.2);
     border-radius: 4px; font-family: inherit; font-size: 13px; outline: none;
@@ -207,12 +233,19 @@ body::before {
     border-radius: 4px; font-size: 14px; cursor: pointer; font-family: inherit;
 }
 .onboarding-btn:hover { background: #a02828; }
-/* Tooltip */
 .tooltip {
     position: absolute; background: rgba(44,44,44,0.9); color: #f5f0e8;
     padding: 6px 12px; border-radius: 4px; font-size: 13px; pointer-events: none;
     z-index: 200; white-space: nowrap; backdrop-filter: blur(4px);
 }
+"""
+
+LOADING_HTML = """
+<div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">唐 诗 社 交 网 络</div>
+    <div class="loading-sub">正在加载 57,607 首唐诗...</div>
+</div>
 """
 
 HEADER_HTML = """
@@ -221,7 +254,7 @@ HEADER_HTML = """
     <div style="display:flex;align-items:center;gap:16px;">
         <div class="search-wrap">
             <div class="search-box">
-                <input type="text" id="searchInput" placeholder="搜索诗人... (按 / 聚焦)">
+                <input type="text" id="searchInput" placeholder="搜索诗人、诗题、诗句... (按 / 聚焦)">
             </div>
             <div class="autocomplete" id="autocomplete"></div>
         </div>
@@ -272,13 +305,18 @@ HEADER_HTML = """
     <div class="onboarding-card">
         <h2>欢迎探索唐诗社交网络</h2>
         <p>这里汇聚了 <b>1,381</b> 位唐代诗人、<b>8,259</b> 条赠诗关系、<b>57,607</b> 首唐诗。</p>
-        <div class="hint">试试搜索「李白」或点击顶部的诗人按钮</div>
+        <div class="hint">试试搜索「春眠不觉晓」或点击顶部的诗人按钮</div>
         <button class="onboarding-btn" onclick="closeOnboarding()">开始探索</button>
     </div>
 </div>
 """
 
 JS = r"""
+// ============ 加载完成 ============
+window.addEventListener('load', () => {
+    setTimeout(() => document.getElementById('loading').classList.add('hide'), 300);
+});
+
 // ============ 初始化 ============
 const container = document.getElementById('graph');
 const width = container.clientWidth, height = container.clientHeight;
@@ -290,8 +328,15 @@ svg.call(zoom);
 // 数据
 const nodeMap = new Map(DATA.nodes.map(n => [n.id, n]));
 const edgesFiltered = DATA.edges.filter(e => nodeMap.has(e.source) && nodeMap.has(e.target));
-const periodSet = new Set(Object.keys(PERIOD_COLORS));
-const activePeriods = new Set(periodSet);
+const activePeriods = new Set(Object.keys(PERIOD_COLORS));
+
+// 构建全文搜索索引（诗人名 -> 诗作列表）
+const poemIndex = [];
+DATA.nodes.forEach(n => {
+    (n.poems || []).forEach(p => {
+        poemIndex.push({ poet: n.id, title: p.title, text: p.text, period: n.period });
+    });
+});
 
 function getNodeRadius(d) { return Math.max(3, Math.min(25, 3 + Math.sqrt(d.poemCount || 1) * 1.5)); }
 
@@ -340,8 +385,7 @@ const node = g.append('g').selectAll('circle').data(DATA.nodes).join('circle')
 const labelThreshold = 5;
 const label = g.append('g').selectAll('text')
     .data(DATA.nodes.filter(d => d.totalDegree >= labelThreshold)).join('text')
-    .text(d => d.id)
-    .attr('font-size', d => d.totalDegree >= 15 ? 12 : 10)
+    .text(d => d.id).attr('font-size', d => d.totalDegree >= 15 ? 12 : 10)
     .attr('fill', '#2c2c2c').attr('text-anchor', 'middle')
     .attr('dy', d => -getNodeRadius(d) - 4)
     .style('pointer-events', 'none').style('font-family', "'STKaiti','KaiTi',serif");
@@ -366,9 +410,7 @@ function showTooltip(e, text) {
 function hideTooltip() { tooltip.style.display = 'none'; }
 
 // ============ 高亮 ============
-let highlightedNode = null;
 function highlightNode(d) {
-    highlightedNode = d;
     const connected = new Set(); connected.add(d.id);
     edgesFiltered.forEach(e => {
         const sid = e.source.id || e.source, tid = e.target.id || e.target;
@@ -385,77 +427,128 @@ function highlightNode(d) {
     label.attr('opacity', n => connected.has(n.id) ? 1 : 0.08);
 }
 function resetHighlight() {
-    highlightedNode = null;
-    node.attr('opacity', d => isPeriodActive(d.period) ? 0.85 : 0.05);
+    node.attr('opacity', d => activePeriods.has(d.period) ? 0.85 : 0.05);
     link.attr('stroke', 'rgba(44,44,44,0.15)').attr('stroke-width', d => Math.max(0.5, d.weight * 0.5));
     label.attr('opacity', 1);
 }
 
 // ============ 时期过滤 ============
-function isPeriodActive(period) { return activePeriods.has(period); }
-
 function applyFilter() {
-    node.attr('opacity', d => isPeriodActive(d.period) ? 0.85 : 0.05)
-        .attr('pointer-events', d => isPeriodActive(d.period) ? 'auto' : 'none');
+    node.attr('opacity', d => activePeriods.has(d.period) ? 0.85 : 0.05)
+        .attr('pointer-events', d => activePeriods.has(d.period) ? 'auto' : 'none');
     link.attr('opacity', d => {
         const sid = d.source.id || d.source, tid = d.target.id || d.target;
         const sn = nodeMap.get(sid), tn = nodeMap.get(tid);
-        return (sn && isPeriodActive(sn.period) && tn && isPeriodActive(tn.period)) ? 1 : 0.03;
+        return (sn && activePeriods.has(sn.period) && tn && activePeriods.has(tn.period)) ? 1 : 0.03;
     });
-    label.attr('opacity', d => isPeriodActive(d.period) ? 1 : 0.05);
-    // 更新图例样式
-    document.querySelectorAll('.legend-item').forEach(el => {
-        const p = el.dataset.period;
-        el.classList.toggle('inactive', !activePeriods.has(p));
-    });
+    label.attr('opacity', d => activePeriods.has(d.period) ? 1 : 0.05);
+    document.querySelectorAll('.legend-item').forEach(el =>
+        el.classList.toggle('inactive', !activePeriods.has(el.dataset.period)));
 }
-
 document.querySelectorAll('.legend-item').forEach(el => {
     el.addEventListener('click', () => {
         const p = el.dataset.period;
-        if (activePeriods.has(p)) { activePeriods.delete(p); } else { activePeriods.add(p); }
+        activePeriods.has(p) ? activePeriods.delete(p) : activePeriods.add(p);
         applyFilter();
     });
 });
 
-// ============ 搜索增强 ============
+// ============ 全文搜索 ============
 const searchInput = document.getElementById('searchInput');
-const autocompleteEl = document.getElementById('autocomplete');
-let acIndex = -1;
+const acEl = document.getElementById('autocomplete');
+let acIndex = -1, searchTimer = null;
 
 searchInput.addEventListener('input', function() {
+    clearTimeout(searchTimer);
     const q = this.value.trim();
-    if (!q) { autocompleteEl.style.display = 'none'; resetHighlight(); return; }
-    const matches = DATA.nodes.filter(n => n.id.includes(q)).slice(0, 10);
-    if (matches.length === 0) { autocompleteEl.style.display = 'none'; return; }
-    acIndex = -1;
-    autocompleteEl.innerHTML = matches.map((m, i) => {
-        const color = PERIOD_COLORS[m.period] || '#999';
-        return '<div class="autocomplete-item" data-idx="' + i + '" data-name="' + m.id + '">' +
-            '<span><span class="period-dot" style="background:' + color + ';display:inline-block;margin-right:6px"></span>' + m.id + '</span>' +
-            '<span class="poem-cnt">' + (m.poemCount||0) + '首</span></div>';
-    }).join('');
-    autocompleteEl.style.display = 'block';
-
-    autocompleteEl.querySelectorAll('.autocomplete-item').forEach(item => {
-        item.addEventListener('click', () => {
-            searchAndFocus(item.dataset.name);
-            autocompleteEl.style.display = 'none';
-        });
-    });
+    if (!q) { acEl.style.display = 'none'; resetHighlight(); return; }
+    searchTimer = setTimeout(() => doSearch(q), 150);
 });
 
+function doSearch(q) {
+    const results = [];
+    // 1. 搜索诗人名
+    const poetMatches = DATA.nodes.filter(n => n.id.includes(q)).slice(0, 5);
+    poetMatches.forEach(m => results.push({ type: 'poet', data: m }));
+
+    // 2. 搜索诗题和诗句
+    const poemMatches = [];
+    for (let i = 0; i < poemIndex.length && poemMatches.length < 8; i++) {
+        const p = poemIndex[i];
+        if (p.title.includes(q) || p.text.includes(q)) {
+            poemMatches.push(p);
+        }
+    }
+    poemMatches.forEach(m => results.push({ type: 'poem', data: m }));
+
+    if (results.length === 0) { acEl.style.display = 'none'; return; }
+    acIndex = -1;
+    renderAutocomplete(results, q);
+    acEl.style.display = 'block';
+}
+
+function highlightText(text, q) {
+    if (!q) return text;
+    const idx = text.indexOf(q);
+    if (idx === -1) return text;
+    const start = Math.max(0, idx - 10);
+    const end = Math.min(text.length, idx + q.length + 20);
+    let snippet = (start > 0 ? '...' : '') + text.slice(start, end) + (end < text.length ? '...' : '');
+    return snippet.replace(q, '<span class="ac-highlight">' + q + '</span>');
+}
+
+function renderAutocomplete(results, q) {
+    let html = '';
+    let poetSection = false, poemSection = false;
+    results.forEach((r, i) => {
+        if (r.type === 'poet' && !poetSection) { html += '<div class="ac-section">诗人</div>'; poetSection = true; }
+        if (r.type === 'poem' && !poemSection) { html += '<div class="ac-section">诗作</div>'; poemSection = true; }
+
+        if (r.type === 'poet') {
+            const m = r.data;
+            const color = PERIOD_COLORS[m.period] || '#999';
+            html += '<div class="ac-item" data-idx="' + i + '" data-type="poet" data-name="' + m.id + '">' +
+                '<div class="ac-left"><span class="ac-period-dot" style="background:' + color + '"></span>' +
+                '<span class="ac-name">' + m.id + '</span>' +
+                '<span class="ac-context">' + m.period + (m.place ? ' · ' + m.place : '') + '</span></div>' +
+                '<span class="ac-right">' + (m.poemCount||0) + '首</span></div>';
+        } else {
+            const p = r.data;
+            html += '<div class="ac-item ac-poem-match" data-idx="' + i + '" data-type="poem" data-poet="' + p.poet + '">' +
+                '<div class="ac-left"><span class="ac-name">' + p.poet + '</span>' +
+                '<span class="ac-context">《' + p.title + '》' + highlightText(p.text, q) + '</span></div></div>';
+        }
+    });
+    acEl.innerHTML = html;
+
+    acEl.querySelectorAll('.ac-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (item.dataset.type === 'poet') {
+                searchAndFocus(item.dataset.name);
+            } else {
+                searchAndFocus(item.dataset.poet);
+            }
+            acEl.style.display = 'none';
+        });
+    });
+}
+
 searchInput.addEventListener('keydown', function(e) {
-    const items = autocompleteEl.querySelectorAll('.autocomplete-item');
+    const items = acEl.querySelectorAll('.ac-item');
     if (e.key === 'ArrowDown') { e.preventDefault(); acIndex = Math.min(acIndex + 1, items.length - 1); updateAcActive(items); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); acIndex = Math.max(acIndex - 1, 0); updateAcActive(items); }
     else if (e.key === 'Enter') {
         e.preventDefault();
-        if (acIndex >= 0 && items[acIndex]) { searchAndFocus(items[acIndex].dataset.name); }
-        else { const q = this.value.trim(); if (q) { const m = DATA.nodes.find(n => n.id === q) || DATA.nodes.find(n => n.id.includes(q)); if (m) searchAndFocus(m.id); } }
-        autocompleteEl.style.display = 'none';
+        if (acIndex >= 0 && items[acIndex]) {
+            const it = items[acIndex];
+            searchAndFocus(it.dataset.type === 'poet' ? it.dataset.name : it.dataset.poet);
+        } else {
+            const q = this.value.trim();
+            if (q) { const m = DATA.nodes.find(n => n.id === q) || DATA.nodes.find(n => n.id.includes(q)); if (m) searchAndFocus(m.id); }
+        }
+        acEl.style.display = 'none';
     }
-    else if (e.key === 'Escape') { autocompleteEl.style.display = 'none'; this.blur(); }
+    else if (e.key === 'Escape') { acEl.style.display = 'none'; this.blur(); }
 });
 
 function updateAcActive(items) {
@@ -464,7 +557,7 @@ function updateAcActive(items) {
 }
 
 document.addEventListener('click', e => {
-    if (!e.target.closest('.search-wrap')) autocompleteEl.style.display = 'none';
+    if (!e.target.closest('.search-wrap')) acEl.style.display = 'none';
 });
 
 // ============ 键盘快捷键 ============
@@ -483,14 +576,26 @@ document.addEventListener('keydown', e => {
 // ============ 搜索并聚焦 ============
 function searchAndFocus(name) {
     searchInput.value = name;
-    autocompleteEl.style.display = 'none';
+    acEl.style.display = 'none';
     const match = nodeMap.get(name);
     if (match) {
         highlightNode(match); showNodeDetail(match);
         svg.transition().duration(750).call(zoom.transform,
             d3.zoomIdentity.translate(width/2, height/2).scale(2).translate(-match.x, -match.y));
+        // 更新URL
+        history.replaceState(null, '', '#' + encodeURIComponent(name));
     }
 }
+
+// ============ URL路由 ============
+function handleHash() {
+    const hash = decodeURIComponent(location.hash.slice(1));
+    if (hash && nodeMap.has(hash)) {
+        setTimeout(() => searchAndFocus(hash), 500);
+    }
+}
+window.addEventListener('hashchange', handleHash);
+handleHash();
 
 // ============ 详情面板 ============
 function getRelations(d) {
@@ -510,6 +615,7 @@ function showNodeDetail(d) {
     panel.style.display = 'block';
     const periodColor = PERIOD_COLORS[d.period] || '#999';
     const rels = getRelations(d);
+    const poems = d.poems || [];
 
     let html = '<div class="panel-title">' + d.id + '</div>';
     html += '<div class="panel-period" style="background:' + periodColor + '">' + d.period + '</div>';
@@ -520,9 +626,12 @@ function showNodeDetail(d) {
     html += '<div class="panel-stat" onclick="showRelationsModal(\'' + d.id + '\',\'in\')"><div class="panel-stat-num">' + d.inDegree + '</div><div class="panel-stat-label">被赠 \u{1F4E8}</div></div>';
     html += '</div>';
 
-    if (d.poems && d.poems.length > 0) {
-        html += '<div class="panel-section"><h3>代表诗作 <span style="font-size:11px;color:#999;cursor:pointer" onclick="showPoemsModal(\'' + d.id + '\')">查看全部 \u{2192}</span></h3>';
-        d.poems.forEach(p => {
+    if (poems.length > 0) {
+        const showCount = Math.min(5, poems.length);
+        html += '<div class="panel-section"><h3>代表诗作 ';
+        if (poems.length > 5) html += '<span class="view-all" onclick="showPoemsModal(\'' + d.id + '\')">查看全部 ' + poems.length + ' 首 \u{2192}</span>';
+        html += '</h3>';
+        poems.slice(0, showCount).forEach(p => {
             html += '<div class="poem-card"><div class="poem-title">《' + p.title + '》</div>';
             html += '<div class="poem-text">' + p.text + '</div></div>';
         });
@@ -530,7 +639,9 @@ function showNodeDetail(d) {
     }
 
     if (rels.length > 0) {
-        html += '<div class="panel-section"><h3>社交关系 (' + rels.length + ') <span style="font-size:11px;color:#999;cursor:pointer" onclick="showRelationsModal(\'' + d.id + '\',\'all\')">查看全部 \u{2192}</span></h3>';
+        html += '<div class="panel-section"><h3>社交关系 (' + rels.length + ') ';
+        if (rels.length > 15) html += '<span class="view-all" onclick="showRelationsModal(\'' + d.id + '\',\'all\')">查看全部 \u{2192}</span>';
+        html += '</h3>';
         rels.slice(0, 15).forEach(r => {
             html += '<div class="relation-item" onclick="searchAndFocus(\'' + r.name + '\')">';
             html += '<b>' + r.name + '</b> — ' + r.dir + ' ' + r.weight + ' 次</div>';
@@ -538,7 +649,7 @@ function showNodeDetail(d) {
         html += '</div>';
     }
     panel.innerHTML = html;
-    window._currentNode = d;
+    history.replaceState(null, '', '#' + encodeURIComponent(d.id));
 }
 
 function showEdgeDetail(d) {
@@ -548,11 +659,11 @@ function showEdgeDetail(d) {
     const src = d.source.id || d.source, tgt = d.target.id || d.target;
     const srcNode = nodeMap.get(src), tgtNode = nodeMap.get(tgt);
 
-    let html = '<div class="panel-title">' + src + ' ↔ ' + tgt + '</div>';
+    let html = '<div class="panel-title">' + src + ' \u{2194} ' + tgt + '</div>';
     html += '<div style="color:#888;font-size:13px;margin-bottom:16px">赠诗 ' + d.weight + ' 次</div>';
     [['src', src, srcNode], ['tgt', tgt, tgtNode]].forEach(([key, name, nd]) => {
+        const poems = (nd?.poems || []).slice(0, 5);
         html += '<div class="panel-section"><h3>' + name + ' 的诗作</h3>';
-        const poems = (nd?.poems || []).slice(0, 3);
         if (poems.length > 0) { poems.forEach(p => {
             html += '<div class="poem-card"><div class="poem-title">《' + p.title + '》</div>';
             html += '<div class="poem-text">' + p.text + '</div></div>';
@@ -563,8 +674,7 @@ function showEdgeDetail(d) {
 }
 
 // ============ 弹窗 ============
-let modalData = [];
-let modalType = '';
+let modalData = [], modalType = '';
 
 function showModal(title, data, type) {
     modalData = data; modalType = type;
@@ -572,9 +682,8 @@ function showModal(title, data, type) {
     renderModalItems(data);
     document.getElementById('modalOverlay').classList.add('show');
     document.getElementById('modalSearch').value = '';
-    document.getElementById('modalSearch').focus();
+    setTimeout(() => document.getElementById('modalSearch').focus(), 100);
 }
-
 function closeModal() { document.getElementById('modalOverlay').classList.remove('show'); }
 
 function renderModalItems(items) {
@@ -594,11 +703,9 @@ function renderModalItems(items) {
 document.getElementById('modalSearch').addEventListener('input', function() {
     const q = this.value.trim();
     if (!q) { renderModalItems(modalData); return; }
-    const filtered = modalData.filter(item => {
-        if (modalType === 'poems') return item.title.includes(q) || item.text.includes(q);
-        return item.name.includes(q);
-    });
-    renderModalItems(filtered);
+    renderModalItems(modalData.filter(item =>
+        modalType === 'poems' ? (item.title.includes(q) || item.text.includes(q)) : item.name.includes(q)
+    ));
 });
 
 document.getElementById('modalOverlay').addEventListener('click', e => {
@@ -606,17 +713,13 @@ document.getElementById('modalOverlay').addEventListener('click', e => {
 });
 
 function showPoemsModal(name) {
-    const d = nodeMap.get(name);
-    if (!d) return;
+    const d = nodeMap.get(name); if (!d) return;
     showModal(name + ' 的诗作 (' + (d.poemCount||0) + '首)', d.poems || [], 'poems');
 }
-
 function showRelationsModal(name, dir) {
-    const d = nodeMap.get(name);
-    if (!d) return;
+    const d = nodeMap.get(name); if (!d) return;
     const rels = getRelations(d);
-    let filtered = rels;
-    let title = name + ' 的社交关系';
+    let filtered = rels, title = name + ' 的社交关系';
     if (dir === 'out') { filtered = rels.filter(r => r.dir === '赠诗给'); title = name + ' 赠诗给...'; }
     if (dir === 'in') { filtered = rels.filter(r => r.dir === '收到赠诗'); title = '赠诗给 ' + name + ' 的人...'; }
     showModal(title + ' (' + filtered.length + '人)', filtered, 'relations');
@@ -624,10 +727,7 @@ function showRelationsModal(name, dir) {
 
 // ============ 引导 ============
 function closeOnboarding() { document.getElementById('onboarding').classList.remove('show'); localStorage.setItem('tpn_visited', '1'); }
-
-if (!localStorage.getItem('tpn_visited')) {
-    setTimeout(() => document.getElementById('onboarding').classList.add('show'), 500);
-}
+if (!localStorage.getItem('tpn_visited')) setTimeout(() => document.getElementById('onboarding').classList.add('show'), 500);
 
 // ============ 自适应 ============
 window.addEventListener('resize', () => {
