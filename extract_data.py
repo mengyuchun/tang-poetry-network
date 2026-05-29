@@ -215,13 +215,51 @@ def main():
         'matched_poets': len(with_poems)
     }
 
+    # 朝代分布统计
+    period_dist = {}
+    for n in nodes_out:
+        p = n['period']
+        period_dist[p] = period_dist.get(p, 0) + 1
+
+    # TOP 20 最具影响力诗人（按总连接度）
+    top_poets = sorted(nodes_out, key=lambda x: x['totalDegree'], reverse=True)[:20]
+    top_poets_out = [{'id': p['id'], 'period': p['period'], 'poemCount': p['poemCount'],
+                      'outDegree': p['outDegree'], 'inDegree': p['inDegree'],
+                      'totalDegree': p['totalDegree']} for p in top_poets]
+
+    # 诗人时间线（有出生年的诗人）
+    timeline = []
+    for n in nodes_out:
+        if n['birthYear'] and n['birthYear'] > 600 and n['birthYear'] < 910:
+            timeline.append({'id': n['id'], 'birthYear': n['birthYear'],
+                           'deathYear': n['birthYear'] + max(30, min(90, n['poemCount'] // 10 + 40)),
+                           'period': n['period'], 'poemCount': n['poemCount']})
+    timeline.sort(key=lambda x: x['birthYear'])
+
+    # 网络统计
+    degrees = [n['totalDegree'] for n in nodes_out]
+    isolated = sum(1 for d in degrees if d == 0)
+    avg_degree = sum(degrees) / len(degrees) if degrees else 0
+
+    network_stats = {
+        'avgDegree': round(avg_degree, 1),
+        'isolatedNodes': isolated,
+        'maxDegree': max(degrees) if degrees else 0,
+        'density': round(len(edges_out) * 2 / (len(nodes_out) * (len(nodes_out) - 1)), 6) if len(nodes_out) > 1 else 0
+    }
+
     with open(os.path.join(OUTPUT_DIR, 'data.json'), 'w', encoding='utf-8') as f:
-        json.dump({'nodes': nodes_out, 'edges': edges_out, 'stats': stats},
-                  f, ensure_ascii=False)
+        json.dump({
+            'nodes': nodes_out, 'edges': edges_out, 'stats': stats,
+            'periodDist': period_dist, 'topPoets': top_poets_out,
+            'timeline': timeline[:500], 'networkStats': network_stats
+        }, f, ensure_ascii=False)
 
     print(f"\n数据已保存: {OUTPUT_DIR}/data.json")
     print(f"  节点: {len(nodes_out)}, 边: {len(edges_out)}")
     print(f"  统计: {stats}")
+    print(f"  朝代分布: {period_dist}")
+    print(f"  网络统计: {network_stats}")
 
 
 if __name__ == '__main__':
