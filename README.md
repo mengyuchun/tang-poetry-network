@@ -47,6 +47,22 @@
 | 高频意象 | 月、风、花、雪、酒... |
 | 数据洞察 | 自动生成描述文字 |
 
+### 演示预览
+-<img width="3071" height="1919" alt="首页引导" src="https://github.com/user-attachments/assets/a481a359-3975-497c-8c8d-1d04d9a12dda" />
+-1. **网络图全景** — 缩小到能看到整体结构，核心诗人清晰可见
+ -<img width="3058" height="1644" alt="网络图" src="https://github.com/user-attachments/assets/b3f05d2c-3020-4b15-ab82-a73fb1fd179e" />
+-2.**诗人及其社会关系、作品** — 点击可查看诗人作品、社交网络连接及全部作品
+-<img width="3058" height="1644" alt="白居易" src="https://github.com/user-attachments/assets/4b779f9c-f75c-47f4-840b-c2c2bd142409" />
+-3. **搜索「诗人名」或「诗句」** — 展示全文搜索结果
+-<img width="958" height="802" alt="搜索栏" src="https://github.com/user-attachments/assets/0e02a969-4fbd-44b0-b1a8-5bebc766c415" />
+-4. **李白→杜甫关系路径** — 展示两位诗人直接的直接或间接关系
+-<img width="3071" height="1640" alt="搜索功能" src="https://github.com/user-attachments/assets/377acc90-42ac-4c2d-988a-9cefc93773f6" />
+ -6. **统计面板** — 展示图表和数据
+-<img width="3049" height="1639" alt="统计图" src="https://github.com/user-attachments/assets/96929d99-6aac-47a0-b371-dffc3a0b2755" />
+-7. **地图视图** — 展示地理分布
+-<img width="3071" height="1639" alt="地图" src="https://github.com/user-attachments/assets/ace52569-1712-4976-ba39-addeb0fd0f90" />
+-8. **深色模式** — 暗色主题效果
+
 ## 使用
 
 **零依赖，下载即用：**
