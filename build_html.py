@@ -226,8 +226,7 @@ HEADER_HTML = """
         <div class="tabs">
             <button class="tab active" data-tab="network">🕸️ 网络图</button>
             <button class="tab" data-tab="map">🗺️ 地图</button>
-            <button class="tab" data-tab="stats">📊 统计</button>
-            <button class="tab" data-tab="insights">💡 洞察</button>
+            <button class="tab" data-tab="stats">📊 统计与洞察</button>
         </div>
         <div class="legend" id="legend">
             <div class="legend-item" data-period="初唐"><div class="legend-dot" style="background:#61a0a8"></div>初唐</div>
@@ -243,7 +242,7 @@ HEADER_HTML = """
 <div class="view" id="mapView">
     <div class="map-timeline" id="mapTimeline">
         <label>⏱️ 时间线</label>
-        <button onclick="mapTimelinePlay()">▶ 播放</button>
+        <button id="playBtn" onclick="mapTimelineToggle()">▶ 播放</button>
         <input type="range" id="yearSlider" min="618" max="907" value="750" step="1">
         <span class="year-display" id="yearDisplay">750</span>
         <span class="period-display" id="periodDisplay">盛唐</span>
@@ -251,7 +250,6 @@ HEADER_HTML = """
     </div>
 </div>
 <div class="view" id="statsView"></div>
-<div class="view" id="insightsView"></div>
 <div class="legend-help">
     <span>节点大小 = 诗作数量</span><span>连线粗细 = 赠诗次数</span><span>拖拽 · 缩放 · 点击探索</span>
 </div>
@@ -348,13 +346,12 @@ function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     currentTab = tab;
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    const viewId = tab === 'network' ? 'graph' : tab === 'map' ? 'mapView' : tab === 'stats' ? 'statsView' : 'insightsView';
+    const viewId = tab === 'network' ? 'graph' : tab === 'map' ? 'mapView' : 'statsView';
     document.getElementById(viewId).classList.add('active');
     document.querySelector('.legend-help').style.display = tab === 'network' ? 'flex' : 'none';
     document.querySelector('.legend').style.display = tab === 'network' ? 'flex' : 'none';
     if (tab === 'map' && !mapInitialized) initMap();
     if (tab === 'stats' && !statsInitialized) initStats();
-    if (tab === 'insights' && !insightsInitialized) initInsights();
 }
 
 // ============ 网络图 ============
@@ -457,19 +454,42 @@ function updateMapMarkers(minYear, maxYear) {
     document.getElementById('countDisplay').textContent = active.length + ' 位诗人';
 }
 
-let mapTimelinePlaying = false;
-function mapTimelinePlay() {
-    if (mapTimelinePlaying) return;
-    mapTimelinePlaying = true;
-    const slider = document.getElementById('yearSlider');
-    let year = 618;
-    const interval = setInterval(() => {
-        slider.value = year;
-        updateMapMarkers(618, year);
-        year += 3;
-        if (year > 907) { clearInterval(interval); mapTimelinePlaying = false; }
-    }, 100);
+let mapTimelinePlaying = false, mapTimelineInterval = null, mapTimelineYear = 618;
+function mapTimelineToggle() {
+    const btn = document.getElementById('playBtn');
+    if (mapTimelinePlaying) {
+        // 暂停
+        clearInterval(mapTimelineInterval);
+        mapTimelinePlaying = false;
+        btn.textContent = '▶ 继续';
+    } else {
+        // 播放
+        mapTimelinePlaying = true;
+        btn.textContent = '⏸ 暂停';
+        const slider = document.getElementById('yearSlider');
+        if (mapTimelineYear >= 907) mapTimelineYear = 618; // 重新开始
+        mapTimelineInterval = setInterval(() => {
+            slider.value = mapTimelineYear;
+            updateMapMarkers(618, mapTimelineYear);
+            mapTimelineYear += 3;
+            if (mapTimelineYear > 907) {
+                clearInterval(mapTimelineInterval);
+                mapTimelinePlaying = false;
+                btn.textContent = '▶ 重播';
+            }
+        }, 100);
+    }
 }
+function mapTimelinePlay() { mapTimelineYear = 618; mapTimelinePlaying = false; mapTimelineToggle(); }
+
+// 用户拖动滑块时同步内部年份
+document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById('yearSlider');
+    if (slider) {
+        slider.addEventListener('mousedown', () => { if (mapTimelinePlaying) { clearInterval(mapTimelineInterval); } });
+        slider.addEventListener('mouseup', () => { mapTimelineYear = parseInt(slider.value); if (mapTimelinePlaying) { mapTimelineToggle(); mapTimelineToggle(); } });
+    }
+});
 
 // ============ 统计 ============
 let statsInitialized = false;
@@ -532,20 +552,11 @@ function initStats() {
     new Chart(document.getElementById('chartDegree'), { type:'bar', data:{labels:degreeBins.map((b,i)=>{const n=degreeBins[i+1];return n?b+'-'+n:b+'+';}),datasets:[{label:'节点数',data:degreeDist,backgroundColor:'rgba(47,69,84,0.6)'}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{type:'logarithmic'}}} });
     // 赠诗次数分布
     new Chart(document.getElementById('chartWeight'), { type:'bar', data:{labels:weightBins.map((b,i)=>{const n=weightBins[i+1];return n?b+'-'+n:b+'+';}),datasets:[{label:'关系数',data:weightDist,backgroundColor:'rgba(212,130,101,0.6)'}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{type:'logarithmic'}}} });
-}
 
-// ============ 数据洞察 ============
-let insightsInitialized = false;
-function initInsights() {
-    insightsInitialized = true;
-    const sv = document.getElementById('insightsView');
-
-    // 计算孤立诗人（有诗但无关系）
-    const isolatedPoets = DATA.nodes.filter(n => n.poemCount > 0 && n.totalDegree === 0);
-    // 计算平均路径长度（采样）
+    // ============ 洞察内容 ============
+    // 平均路径长度（采样）
     const adj = new Map();
     edgesFiltered.forEach(e => { const s=e.source.id||e.source, t=e.target.id||e.target; if(!adj.has(s))adj.set(s,[]); if(!adj.has(t))adj.set(t,[]); adj.get(s).push(t); adj.get(t).push(s); });
-    // BFS 计算平均距离（采样100个节点）
     const connectedNodes = DATA.nodes.filter(n => n.totalDegree > 0).map(n => n.id);
     let totalDist = 0, distCount = 0;
     const sampleSize = Math.min(100, connectedNodes.length);
@@ -553,33 +564,23 @@ function initInsights() {
         const start = connectedNodes[Math.floor(Math.random() * connectedNodes.length)];
         const visited = new Map(); visited.set(start, 0);
         const queue = [start];
-        while (queue.length > 0) {
-            const curr = queue.shift();
-            for (const next of (adj.get(curr) || [])) {
-                if (!visited.has(next)) { visited.set(next, visited.get(curr) + 1); queue.push(next); }
-            }
-        }
+        while (queue.length > 0) { const curr = queue.shift(); for (const next of (adj.get(curr) || [])) { if (!visited.has(next)) { visited.set(next, visited.get(curr) + 1); queue.push(next); } } }
         visited.forEach((dist, node) => { if (node !== start && dist > 0) { totalDist += dist; distCount++; } });
     }
     const avgPath = distCount > 0 ? (totalDist / distCount).toFixed(1) : 'N/A';
 
-    // 最繁忙的诗人
+    // 最繁忙诗人
     const busiest = DATA.nodes.filter(n => n.totalDegree > 0).sort((a,b) => b.totalDegree - a.totalDegree).slice(0, 5);
-    // 诗作最多但关系最少
+    // 高产但关系少
     const lonelyPoets = DATA.nodes.filter(n => n.poemCount >= 50 && n.totalDegree <= 3).sort((a,b) => b.poemCount - a.poemCount).slice(0, 5);
-    // 地理中心（按朝代）
+    // 地理中心
     const geoByPeriod = {};
     ['初唐','盛唐','中唐','晚唐'].forEach(p => {
         const nodes = DATA.nodes.filter(n => n.period === p && n.lng && n.lat);
-        if (nodes.length > 0) {
-            const avgLng = nodes.reduce((s,n) => s + n.lng, 0) / nodes.length;
-            const avgLat = nodes.reduce((s,n) => s + n.lat, 0) / nodes.length;
-            geoByPeriod[p] = { lng: avgLng.toFixed(1), lat: avgLat.toFixed(1), count: nodes.length };
-        }
+        if (nodes.length > 0) { geoByPeriod[p] = { lng: (nodes.reduce((s,n) => s + n.lng, 0) / nodes.length).toFixed(1), lat: (nodes.reduce((s,n) => s + n.lat, 0) / nodes.length).toFixed(1), count: nodes.length }; }
     });
 
-    sv.innerHTML = '<div class="insights-container">'
-        + '<div class="insight-card"><h3>🔍 数据全景</h3>'
+    const insightsHtml = '<div class="insight-card"><h3>🔍 数据全景</h3>'
         + '<div class="insight-grid">'
         + '<div class="insight-stat"><div class="num">' + DATA.nodes.length + '</div><div class="label">诗人总数</div></div>'
         + '<div class="insight-stat"><div class="num">' + edgesFiltered.length + '</div><div class="label">赠诗关系</div></div>'
@@ -593,7 +594,7 @@ function initInsights() {
         + '<button class="insight-btn" onclick="searchAndFocus(\'' + busiest[0].id + '\')">探索 ' + busiest[0].id + ' 的网络</button></div>'
 
         + '<div class="insight-card"><h3>🏔️ 最「孤独」的高产诗人</h3>'
-        + '<p>这些诗人写了大量诗作，但在赠诗关系网络中却很少出现。他们可能是隐士、游侠，或者只是数据的缺失。</p>'
+        + '<p>这些诗人写了大量诗作，但在赠诗关系网络中却很少出现。</p>'
         + lonelyPoets.map(n => '<div class="data-row"><span class="data-label"><b>' + n.id + '</b> (' + n.period + ')</span><span>' + (n.poemCount||0) + ' 首诗 · 仅 ' + n.totalDegree + ' 条关系</span></div>').join('')
         + '</div>'
 
@@ -602,16 +603,14 @@ function initInsights() {
         + Object.entries(geoByPeriod).map(([p, d]) => '<div class="data-row"><span class="data-label"><b>' + p + '</b></span><span>中心: (' + d.lat + '°N, ' + d.lng + '°E) · ' + d.count + ' 位诗人</span></div>').join('')
         + '<button class="insight-btn" onclick="switchTab(\'map\');mapTimelinePlay()">观看时间线动画</button></div>'
 
-        + '<div class="insight-card"><h3>🏝️ 孤立的诗人</h3>'
-        + '<p>这些诗人有作品传世，但在赠诗关系网络中完全没有连接。共 <span class="highlight">' + isolatedPoets.length + '</span> 位。</p>'
-        + (isolatedPoets.length > 0 ? isolatedPoets.slice(0, 10).map(n => '<div class="data-row"><span class="data-label"><b>' + n.id + '</b> (' + n.period + ')</span><span>' + (n.poemCount||0) + ' 首诗</span></div>').join('') : '<p>所有有作品的诗人都有至少一条关系。</p>')
-        + '</div>'
-
         + '<div class="insight-card"><h3>💡 关于这些数据</h3>'
-        + '<p>这些数据来自 <a href="https://projects.iq.harvard.edu/cbdb" target="_blank" style="color:var(--accent)">CBDB（中国历代人物传记资料库）</a>的赠诗关系数据和 <a href="https://github.com/chinese-poetry/chinese-poetry" target="_blank" style="color:var(--accent)">chinese-poetry</a> 的唐诗全文。</p>'
+        + '<p>数据来源：<a href="https://projects.iq.harvard.edu/cbdb" target="_blank" style="color:var(--accent)">CBDB</a> + <a href="https://github.com/chinese-poetry/chinese-poetry" target="_blank" style="color:var(--accent)">chinese-poetry</a></p>'
         + '<p>平均距离通过 BFS 算法在连通分量中采样计算。地理中心为诗人籍贯坐标的算术平均值。</p>'
-        + '<p>数据的局限性：赠诗关系仅记录了有文献记载的交往，实际的文人交流远比数据丰富。</p>'
-        + '</div></div>';
+        + '<p>局限性：赠诗关系仅记录有文献记载的交往，实际文人交流远比数据丰富。</p>'
+        + '</div>';
+
+    // 追加到统计页面
+    sv.innerHTML += insightsHtml;
 }
 
 // ============ 路径输入自动补全 ============
@@ -781,7 +780,7 @@ document.addEventListener('click', e => { if(!e.target.closest('.search-wrap'))a
 document.addEventListener('keydown', e => {
     if(e.key==='/'&&document.activeElement!==searchInput&&!document.querySelector('.modal-overlay.show')){e.preventDefault();searchInput.focus();}
     if(e.key==='Escape'){if(document.querySelector('.modal-overlay.show'))closeModal();else if(document.getElementById('onboarding').classList.contains('show'))closeOnboarding();else closePanel();}
-    if(e.key==='Tab'&&document.activeElement===document.body){e.preventDefault();const tabs=['network','map','stats','insights'];switchTab(tabs[(tabs.indexOf(currentTab)+1)%tabs.length]);}
+    if(e.key==='Tab'&&document.activeElement===document.body){e.preventDefault();const tabs=['network','map','stats'];switchTab(tabs[(tabs.indexOf(currentTab)+1)%tabs.length]);}
 });
 
 // ============ 搜索聚焦 ============
